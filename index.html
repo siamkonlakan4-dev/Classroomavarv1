@@ -1025,7 +1025,26 @@ function openRandom(){const cls=randClassList();if(!randState.clsId&&cls[0])rand
 function closeRandom(){const ov=document.getElementById('randOverlay');if(ov)ov.style.display='none';}
 function randSelectCls(clsId,silent){randState.clsId=clsId;randState.pool=randStudentsOf(clsId).map(s=>s.id);randState.picked=[];if(!silent)renderRandom();}
 function toggleRandMode(){randState.removeMode=!randState.removeMode;renderRandom();}
-
+function doRandomPick(){
+  if(randState.spinning||!randState.pool.length)return;
+  randState.spinning=true;
+  const disp=document.getElementById('randResult');
+  let ticks=0;const total=14;
+  const spin=setInterval(()=>{
+    const rid=randState.pool[Math.floor(Math.random()*randState.pool.length)];
+    const s=DB.students.find(x=>x.id===rid);
+    if(disp&&s)disp.innerHTML=randCardHTML(s,true);
+    if(++ticks>=total){
+      clearInterval(spin);
+      const finalId=randState.pool[Math.floor(Math.random()*randState.pool.length)];
+      randState.picked.unshift(finalId);
+      if(randState.removeMode)randState.pool=randState.pool.filter(id=>id!==finalId);
+      randState.spinning=false;
+      typeof soundDone==='function'&&soundDone();
+      renderRandom();
+    }
+  },70);
+}
 function randomPick(){openRandom();}
 
 function renderRandom(){
