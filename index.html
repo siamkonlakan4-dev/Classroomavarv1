@@ -46,6 +46,7 @@
   .btn.red{background:var(--gRed);box-shadow:0 5px 14px rgba(255,77,77,.3)}
   .btn.orange{background:var(--gOrange);box-shadow:0 5px 14px rgba(255,159,28,.3)}
   .btn.purple{background:var(--gPurple);box-shadow:0 5px 14px rgba(155,92,255,.3)}
+  .btn.teal{background:var(--gTeal);box-shadow:0 5px 14px rgba(14,165,233,.3)}
   .btn.sm{padding:8px 13px;font-size:13px;border-radius:11px}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .spacer{flex:1}
@@ -55,7 +56,7 @@
   .scard:active{transform:scale(.96)}
   .scard .no{position:absolute;top:13px;left:12px;font-size:11px;font-weight:600;z-index:1;background:#fff;color:var(--purple);border-radius:9px;padding:2px 8px;box-shadow:0 2px 6px rgba(120,90,200,.18)}
   .scard .att{position:absolute;top:14px;right:12px;width:12px;height:12px;border-radius:50%;background:var(--sep);z-index:1;border:2px solid #fff;box-shadow:0 0 0 1px var(--sep)}
-  .scard .att.present{background:var(--green)}.scard .att.absent{background:var(--red)}.scard .att.late{background:var(--orange)}.scard .att.skip{background:var(--purple)}
+  .scard .att.present{background:var(--green)}.scard .att.absent{background:var(--red)}.scard .att.late{background:var(--orange)}.scard .att.skip{background:var(--purple)}.scard .att.leave{background:#0ea5e9}
   .scard .warn{position:absolute;top:13px;right:12px;font-size:13px;z-index:1}
   .scard .avatar{margin:10px auto 8px;width:74px;height:74px;filter:drop-shadow(0 4px 8px rgba(100,80,180,.18))}
   .scard .name{font-size:14px;font-weight:500;line-height:1.2}
@@ -270,7 +271,7 @@ body{font-size:clamp(15px,1.4vw,17px);padding-bottom:110px}
    mustChange = true → ถูกบังคับตั้งรหัสใหม่หลังล็อกอิน
    ============================================================ */
 const DB_KEY='classroom_rbac_v3';
-/* ===== SUPABASE ===== */
+/* ===== SUPABASE MAIL channarong@siamkonlakan4.ac.th ===== */
 const SB_URL='https://jburieqpvqjyelhqdnkd.supabase.co';
 const SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpidXJpZXFwdnFqeWVsaHFkbmtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MTUyMDMsImV4cCI6MjA5ODI5MTIwM30.9ukfC5IeJi8yuV2q4F9ZAruGEm1GOnhPH_kgcTIU-vY';
 const sb=window.supabase.createClient(SB_URL,SB_ANON,{auth:{persistSession:true}});
@@ -296,8 +297,8 @@ const uid=()=>Math.random().toString(36).slice(2,9);
 const today=()=>new Date().toISOString().slice(0,10);
 const THDAYS=['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
 const THMONTHS=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-const ATTLABEL={present:'มาเรียน',late:'มาสาย',absent:'ขาดเรียน',skip:'หนีเรียน'};
-const ATTCOLOR={present:'var(--green)',late:'var(--orange)',absent:'var(--red)',skip:'var(--purple)'};
+const ATTLABEL={present:'มาเรียน',late:'มาสาย',absent:'ขาดเรียน',skip:'หนีเรียน',leave:'ลา/ลากิจ'};
+const ATTCOLOR={present:'var(--green)',late:'var(--orange)',absent:'var(--red)',skip:'var(--purple)',leave:'#0ea5e9'};
 const ROLELABEL={admin:'ผู้ดูแลระบบ',teacher:'ครู',student:'นักเรียน'};
 const ROLECOLOR={admin:'var(--gRed)',teacher:'var(--gBlue)',student:'var(--gGreen)'};
 
@@ -583,17 +584,17 @@ function gradeOf(stu){const w=DB.weights;const subs=subjectsOf(stu.classroomId).
   let dG=0,dF=0,fG=0,fF=0;asgs.forEach(a=>{const sc=a.scores?.[stu.id];if(sc&&sc.value!=null){if(a.type==='final'){fG+=+sc.value;fF+=+(a.fullScore||1);}else{dG+=+sc.value;dF+=+(a.fullScore||1);}}});
   const dp=dF?dG/dF:0,fp=fF?fG/fF:0;const total=Math.round(dp*w.during+fp*w.final);
   const grade=total>=80?4:total>=75?3.5:total>=70?3:total>=65?2.5:total>=60?2:total>=55?1.5:total>=50?1:0;return{total,grade};}
-function attStats(stu){let p=0,l=0,a=0,k=0,tot=0;Object.values(stu.attendance||{}).forEach(v=>{tot++;if(v==='present')p++;else if(v==='late')l++;else if(v==='absent')a++;else if(v==='skip')k++;});const rate=tot?Math.round((p+l*.5)/tot*100):0;return{p,l,a,k,tot,rate};}
+function attStats(stu){let p=0,l=0,a=0,k=0,lv=0,tot=0;Object.values(stu.attendance||{}).forEach(v=>{tot++;if(v==='present')p++;else if(v==='late')l++;else if(v==='absent')a++;else if(v==='skip')k++;else if(v==='leave')lv++;});const rate=tot?Math.round((p+l*.5)/tot*100):0;return{p,l,a,k,lv,tot,rate};}
 
 function attStatsFor(stu,subjId){
-  let p=0,l=0,a=0,k=0,tot=0;
+  let p=0,l=0,a=0,k=0,lv=0,tot=0;
   Object.entries(stu.attendance||{}).forEach(([key,v])=>{
-    if(subjId!=='all'&&!key.startsWith(subjId+'|'))return; // key คือ "subjId|date"
+    if(subjId!=='all'&&!key.startsWith(subjId+'|'))return;
     tot++;
-    if(v==='present')p++;else if(v==='late')l++;else if(v==='absent')a++;else if(v==='skip')k++;
+    if(v==='present')p++;else if(v==='late')l++;else if(v==='absent')a++;else if(v==='skip')k++;else if(v==='leave')lv++;
   });
   const rate=tot?Math.round((p+l*.5)/tot*100):0;
-  return{p,l,a,k,tot,rate};
+  return{p,l,a,k,lv,tot,rate};
 }
   
 /* ============================================================
@@ -1142,7 +1143,7 @@ function renderScan(){setTopActions('');const el=document.getElementById('page-s
   const{sub,cls,clsIds,studs}=ctx;activeClassId=cls.id;const asgs=subjAssign(scanSubjId);
   if(!scanAssignId||!asgs.find(a=>a.id===scanAssignId))scanAssignId=asgs[0]?.id||null;
   let warn='';if((sub.schedule||[]).length){const dName=THDAYS[new Date(scanDate+'T00:00').getDay()];if(!sub.schedule.some(x=>x.day===dName))warn=`<div class="meta" style="color:var(--orange);margin-top:6px">⚠️ วิชานี้ไม่มีในตารางสอนวัน${dName}</div>`;}
-  const modes=[['present','มาเรียน','green'],['late','มาสาย','orange'],['absent','ขาดเรียน','red'],['skip','หนีเรียน','purple']];
+  const modes=[['present','มาเรียน','green'],['late','มาสาย','orange'],['absent','ขาดเรียน','red'],['skip','หนีเรียน','purple'],['leave','ลา/ลากิจ','teal']];
   const recent=DB.logs.filter(l=>(l.type==='att'||l.type==='work')&&l.classroom===cls.name).slice(0,6);
   const subjOptions=mySubjects().map(s=>`<option value="${s.id}" ${s.id===scanSubjId?'selected':''}>${esc(s.code||'')} ${esc(s.name)}${(s.classroomIds||[]).length>1?' · '+(s.classroomIds||[]).length+' ห้อง':''}</option>`).join('');
   const clsSelector=clsIds.length>1?`<label class="fl">เลือกห้อง (${clsIds.length} ห้อง)</label><select style="margin-bottom:6px" onchange="window._pending.clear();scanClsId=this.value;render()">${clsIds.map(id=>`<option value="${id}" ${id===scanClsId?'selected':''}>${esc(clsById(id)?.name||'')}</option>`).join('')}</select>`:'';
@@ -1253,10 +1254,10 @@ function renderReport(){setTopActions('');const el=document.getElementById('page
 function buildReportHTML(cls,subs,studs){
   if(repMode==='att'){const subList=repSubj==='all'?subs.map(s=>s.id):[repSubj];
     const statusOf=stu=>{for(const sid of subList){const v=(stu.attendance||{})[attKey(sid,repDate)];if(v)return v;}return'';};
-    const cnt={present:0,late:0,absent:0,skip:0,none:0};studs.forEach(s=>{cnt[statusOf(s)||'none']++;});
-    const max=Math.max(cnt.present,cnt.late,cnt.absent,cnt.skip,1);
+    const cnt={present:0,late:0,absent:0,skip:0,leave:0,none:0};studs.forEach(s=>{cnt[statusOf(s)||'none']++;});
+    const max=Math.max(cnt.present,cnt.late,cnt.absent,cnt.skip,cnt.leave,1);
     return`<div class="listcard"><h3>📅 สรุปการมาเรียน · ${thDate(repDate)}</h3><div class="meta" style="margin-bottom:6px">${esc(cls.name)} · ${repSubj==='all'?'ทุกวิชา':esc(subs.find(s=>s.id===repSubj)?.name||'')}</div>
-      <div class="bar-wrap"><div class="bar" style="height:${cnt.present/max*100}%;background:var(--gGreen)"><span>${cnt.present}</span><small>มา</small></div><div class="bar" style="height:${cnt.late/max*100}%;background:var(--gOrange)"><span>${cnt.late}</span><small>สาย</small></div><div class="bar" style="height:${cnt.absent/max*100}%;background:var(--gRed)"><span>${cnt.absent}</span><small>ขาด</small></div><div class="bar" style="height:${cnt.skip/max*100}%;background:var(--gPurple)"><span>${cnt.skip}</span><small>หนี</small></div></div></div>
+      <div class="bar-wrap"><div class="bar" style="height:${cnt.present/max*100}%;background:var(--gGreen)"><span>${cnt.present}</span><small>มา</small></div><div class="bar" style="height:${cnt.late/max*100}%;background:var(--gOrange)"><span>${cnt.late}</span><small>สาย</small></div><div class="bar" style="height:${cnt.absent/max*100}%;background:var(--gRed)"><span>${cnt.absent}</span><small>ขาด</small></div><div class="bar" style="height:${cnt.skip/max*100}%;background:var(--gPurple)"><span>${cnt.skip}</span><small>หนี</small></div></div></div><div class="bar" style="height:${cnt.leave/max*100}%;background:var(--gTeal)"><span>${cnt.leave}</span><small>ลา</small></div>
       <div class="listcard"><h3>📋 รายชื่อ (${studs.length} คน)</h3>${studs.map(s=>{const st=statusOf(s);return`<div class="reprow"><div style="width:30px">${avatarSVG(s.avatar,30)}</div><div style="flex:1;font-size:14px">${s.number}. ${esc(s.name)}<div class="meta">${esc(s.code||'')}</div></div><span class="pill" style="background:${st?ATTCOLOR[st]:'var(--sep)'};color:${st?'#fff':'var(--label)'}">${st?ATTLABEL[st]:'ยังไม่เช็ก'}</span></div>`;}).join('')}</div>`;}
   else{const subList=repSubj==='all'?subs.map(s=>s.id):[repSubj];const asgs=DB.assignments.filter(a=>subList.includes(a.subjectId));const subOf=stu=>asgs.filter(a=>a.scores?.[stu.id]?.submittedAt).length;const totalA=asgs.length;
     return`<div class="listcard"><h3>📦 สรุปการส่งงาน</h3><div class="meta" style="margin-bottom:6px">${esc(cls.name)} · ${totalA} ชิ้นงาน</div>${studs.map(s=>{const n=subOf(s);const pct=totalA?Math.round(n/totalA*100):0;return`<div style="margin:9px 0"><div class="row"><span style="font-size:13px">${s.number}. ${esc(s.name)}</span><div class="spacer"></div><b>${n}/${totalA}</b></div><div style="background:var(--sep);border-radius:8px;height:9px;margin-top:4px"><div style="width:${pct}%;height:100%;background:var(--gGreen);border-radius:8px"></div></div></div>`;}).join('')}</div>`;}}
@@ -1348,7 +1349,7 @@ function renderPortal(){const el=document.getElementById('page-portal');
     <div class="listcard"><h3>📅 สรุปการเข้าเรียน</h3>
     ${attSelHTML}
     <div class="meta" style="margin-bottom:8px">${attScope} · จากทั้งหมด ${at2.tot} ครั้ง · อัตราเข้าเรียน <b>${at2.rate}%</b></div>
-    <div class="row"><span class="pill" style="background:#eafbf0;color:#16a34a">มา ${at2.p}</span><span class="pill" style="background:#fff3e0;color:#e07a00">สาย ${at2.l}</span><span class="pill" style="background:#ffe9e9;color:var(--red)">ขาด ${at2.a}</span><span class="pill" style="background:#f3eafe;color:var(--purple)">หนี ${at2.k}</span></div></div>
+    <div class="row"><span class="pill" style="background:#eafbf0;color:#16a34a">มา ${at2.p}</span><span class="pill" style="background:#fff3e0;color:#e07a00">สาย ${at2.l}</span><span class="pill" style="background:#ffe9e9;color:var(--red)">ขาด ${at2.a}</span><span class="pill" style="background:#f3eafe;color:var(--purple)">หนี ${at2.k}</span><span class="pill" style="background:#e0f4ff;color:#0284c7">ลา ${at2.lv}</span></div></div>
     <div class="listcard"><h3>📊 คะแนนรายวิชา</h3>${subjRows}</div>
     ${myWorkCardHTML(stu)}
     ${shopCardHTML(stu)}
