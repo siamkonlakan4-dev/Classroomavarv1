@@ -583,6 +583,17 @@ function gradeOf(stu){const w=DB.weights;const subs=subjectsOf(stu.classroomId).
   const grade=total>=80?4:total>=75?3.5:total>=70?3:total>=65?2.5:total>=60?2:total>=55?1.5:total>=50?1:0;return{total,grade};}
 function attStats(stu){let p=0,l=0,a=0,k=0,tot=0;Object.values(stu.attendance||{}).forEach(v=>{tot++;if(v==='present')p++;else if(v==='late')l++;else if(v==='absent')a++;else if(v==='skip')k++;});const rate=tot?Math.round((p+l*.5)/tot*100):0;return{p,l,a,k,tot,rate};}
 
+function attStatsFor(stu,subjId){
+  let p=0,l=0,a=0,k=0,tot=0;
+  Object.entries(stu.attendance||{}).forEach(([key,v])=>{
+    if(subjId!=='all'&&!key.startsWith(subjId+'|'))return; // key คือ "subjId|date"
+    tot++;
+    if(v==='present')p++;else if(v==='late')l++;else if(v==='absent')a++;else if(v==='skip')k++;
+  });
+  const rate=tot?Math.round((p+l*.5)/tot*100):0;
+  return{p,l,a,k,tot,rate};
+}
+  
 /* ============================================================
    PAGE: USERS  (admin เท่านั้น)
    ============================================================ */
@@ -1223,6 +1234,7 @@ function renderRank(){setTopActions('');const el=document.getElementById('page-r
    REPORT
    ============================================================ */
 let repCls=null,repSubj='all',repDate=today(),repMode='att',repShown=false;
+let portalAttSubj='all';
 function repChange(){repShown=false;render();}
 function showReport(){repShown=true;render();}
 function renderReport(){setTopActions('');const el=document.getElementById('page-report');const mine=myClassrooms();
@@ -1321,10 +1333,20 @@ function renderPortal(){const el=document.getElementById('page-portal');
   const subs=subjectsOf(stu.classroomId);
   const subjRows=subs.map(s=>{const as=subjAssign(s.id);let got=0,full=0,submitted=0;as.forEach(a=>{const sc=a.scores?.[stu.id];if(sc?.submittedAt)submitted++;if(sc&&sc.value!=null){got+=+sc.value;full+=+a.fullScore;}});const pct=full?Math.round(got/full*100):0;
     return`<div style="margin:10px 0"><div class="row"><span style="font-size:14px;font-weight:500">📚 ${esc(s.name)}</span><div class="spacer"></div><b>${got}/${full||0}</b></div><div class="meta">ส่งงาน ${submitted}/${as.length} ชิ้น</div><div style="background:var(--sep);border-radius:8px;height:9px;margin-top:5px"><div style="width:${pct}%;height:100%;background:var(--gBlue);border-radius:8px"></div></div></div>`;}).join('')||'<p class="meta">ยังไม่มีรายวิชา</p>';
+  if(portalAttSubj!=='all'&&!subs.find(s=>s.id===portalAttSubj))portalAttSubj='all';
+  const at2=attStatsFor(stu,portalAttSubj);
+  const attSelHTML=`<select style="margin-bottom:10px" onchange="portalAttSubj=this.value;renderPortal()">
+    <option value="all" ${portalAttSubj==='all'?'selected':''}>ทุกวิชา (ภาพรวม)</option>
+    ${subs.map(s=>`<option value="${s.id}" ${s.id===portalAttSubj?'selected':''}>${esc(s.code||'')} ${esc(s.name)}</option>`).join('')}
+  </select>`;
+  const attScope=portalAttSubj==='all'?'รวมทุกวิชา':'เฉพาะวิชา '+esc(subs.find(s=>s.id===portalAttSubj)?.name||'');                        
   el.innerHTML=`<div class="listcard" style="text-align:center"><div style="margin-bottom:6px">${avatarSVG(stu.avatar,96)}</div><h3 style="justify-content:center;font-size:19px">${esc(stu.name)}</h3><div class="meta">เลขที่ ${stu.number} · ${esc(cls?.name||'')} · รหัส ${esc(stu.code||'-')}</div></div>
     <div class="statgrid"><div class="stat s1"><div class="v">${g.total}</div><div class="k">คะแนนรวม</div></div><div class="stat s2"><div class="v">${g.grade}</div><div class="k">เกรดประเมิน</div></div><div class="stat s3"><div class="v">${at.rate}%</div><div class="k">เข้าเรียน</div></div><div class="stat s4"><div class="v">${stu.points||0}</div><div class="k">แต้มสะสม</div></div></div>
     <div class="listcard"><h3>🏆 อันดับในห้อง (${classStuds.length} คน)</h3><div class="row" style="margin-top:6px"><div style="flex:1;text-align:center;background:#f6f4ff;border-radius:14px;padding:12px"><div style="font-size:24px;font-weight:700;color:var(--purple)">#${rkScore}</div><div class="meta">ด้านคะแนน</div></div><div style="flex:1;text-align:center;background:#f0fbf4;border-radius:14px;padding:12px"><div style="font-size:24px;font-weight:700;color:var(--green)">#${rkAtt}</div><div class="meta">ด้านเข้าเรียน</div></div></div></div>
-    <div class="listcard"><h3>📅 สรุปการเข้าเรียน</h3><div class="meta" style="margin-bottom:8px">จากทั้งหมด ${at.tot} ครั้ง</div><div class="row"><span class="pill" style="background:#eafbf0;color:#16a34a">มา ${at.p}</span><span class="pill" style="background:#fff3e0;color:#e07a00">สาย ${at.l}</span><span class="pill" style="background:#ffe9e9;color:var(--red)">ขาด ${at.a}</span><span class="pill" style="background:#f3eafe;color:var(--purple)">หนี ${at.k}</span></div></div>
+    <div class="listcard"><h3>📅 สรุปการเข้าเรียน</h3>
+    ${attSelHTML}
+    <div class="meta" style="margin-bottom:8px">${attScope} · จากทั้งหมด ${at2.tot} ครั้ง · อัตราเข้าเรียน <b>${at2.rate}%</b></div>
+    <div class="row"><span class="pill" style="background:#eafbf0;color:#16a34a">มา ${at2.p}</span><span class="pill" style="background:#fff3e0;color:#e07a00">สาย ${at2.l}</span><span class="pill" style="background:#ffe9e9;color:var(--red)">ขาด ${at2.a}</span><span class="pill" style="background:#f3eafe;color:var(--purple)">หนี ${at2.k}</span></div></div>
     <div class="listcard"><h3>📊 คะแนนรายวิชา</h3>${subjRows}</div>
     ${myWorkCardHTML(stu)}
     ${shopCardHTML(stu)}
