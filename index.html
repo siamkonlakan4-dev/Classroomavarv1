@@ -1326,6 +1326,7 @@ function renderPortal(){const el=document.getElementById('page-portal');
     <div class="listcard"><h3>🏆 อันดับในห้อง (${classStuds.length} คน)</h3><div class="row" style="margin-top:6px"><div style="flex:1;text-align:center;background:#f6f4ff;border-radius:14px;padding:12px"><div style="font-size:24px;font-weight:700;color:var(--purple)">#${rkScore}</div><div class="meta">ด้านคะแนน</div></div><div style="flex:1;text-align:center;background:#f0fbf4;border-radius:14px;padding:12px"><div style="font-size:24px;font-weight:700;color:var(--green)">#${rkAtt}</div><div class="meta">ด้านเข้าเรียน</div></div></div></div>
     <div class="listcard"><h3>📅 สรุปการเข้าเรียน</h3><div class="meta" style="margin-bottom:8px">จากทั้งหมด ${at.tot} ครั้ง</div><div class="row"><span class="pill" style="background:#eafbf0;color:#16a34a">มา ${at.p}</span><span class="pill" style="background:#fff3e0;color:#e07a00">สาย ${at.l}</span><span class="pill" style="background:#ffe9e9;color:var(--red)">ขาด ${at.a}</span><span class="pill" style="background:#f3eafe;color:var(--purple)">หนี ${at.k}</span></div></div>
     <div class="listcard"><h3>📊 คะแนนรายวิชา</h3>${subjRows}</div>
+    ${myWorkCardHTML(stu)}
     ${shopCardHTML(stu)}
     <div class="listcard"><h3>🔑 รหัสผ่านของฉัน</h3><label class="fl" style="margin-top:6px">เปลี่ยนรหัสผ่าน</label><input id="stu_pass" type="password" placeholder="รหัสใหม่ (อย่างน้อย 4 ตัว)"><button class="btn sm" onclick="studentChangePass()">บันทึกรหัสผ่าน</button><p class="meta" style="margin-top:8px">หากลืมรหัส ติดต่อครูประจำวิชาเพื่อรีเซ็ต</p></div>`;}
 async function studentChangePass(){
@@ -1336,6 +1337,35 @@ async function studentChangePass(){
   if(error)return banner('เปลี่ยนรหัสไม่สำเร็จ: '+error.message,true);
   await sb.from('students').update({must_change:false}).eq('id',stu.id);
   stu.mustChange=false;document.getElementById('stu_pass').value='';banner('เปลี่ยนรหัสผ่านแล้ว');
+}
+
+function myWorkCardHTML(stu){
+  const subs=subjectsOf(stu.classroomId);
+  let totalAsg=0,totalSubmitted=0;
+  const now=new Date();
+  const blocks=subs.map(s=>{
+    const as=subjAssign(s.id).slice().sort((a,b)=>(a.due||a.createdAt||'').localeCompare(b.due||b.createdAt||''));
+    if(!as.length)return '';
+    const rows=as.map(a=>{
+      const sc=a.scores?.[stu.id];
+      const submitted=!!sc?.submittedAt;
+      const graded=sc&&sc.value!=null;
+      const overdue=!submitted&&a.due&&new Date(a.due)<now;
+      totalAsg++;if(submitted)totalSubmitted++;
+      let badge;
+      if(submitted)badge=`<span class="pill" style="background:#eafbf0;color:#16a34a">✓ ส่งแล้ว${graded?` · ${sc.value}/${a.fullScore}`:''}</span>`;
+      else if(overdue)badge=`<span class="pill" style="background:#ffe9e9;color:var(--red)">✗ เลยกำหนด</span>`;
+      else badge=`<span class="pill" style="background:#fff3e0;color:#e07a00">○ ยังไม่ส่ง</span>`;
+      const due=a.due?`<div class="meta">⏰ ส่งภายใน ${a.due.replace('T',' ')}</div>`:'';
+      return`<div class="reprow"><div style="flex:1;min-width:0"><div style="font-size:14px">📝 ${esc(a.name)}</div>${due}</div>${badge}</div>`;
+    }).join('');
+    return`<div style="font-weight:600;margin:12px 0 4px;color:var(--purple)">📚 ${esc(s.name)}</div>${rows}`;
+  }).join('');
+  if(!totalAsg)return`<div class="listcard"><h3>📋 งานของฉัน</h3><p class="meta">ยังไม่มีงานที่ต้องส่ง</p></div>`;
+  const pending=totalAsg-totalSubmitted;
+  return`<div class="listcard"><h3>📋 งานของฉัน</h3>
+    <div class="row" style="margin-bottom:4px"><span class="pill" style="background:#eafbf0;color:#16a34a">ส่งแล้ว ${totalSubmitted}</span><span class="pill" style="background:#fff3e0;color:#e07a00">ค้างส่ง ${pending}</span></div>
+    ${blocks}</div>`;
 }
 
 /* ============================================================
