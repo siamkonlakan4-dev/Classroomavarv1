@@ -1026,26 +1026,7 @@ function closeRandom(){const ov=document.getElementById('randOverlay');if(ov)ov.
 function randSelectCls(clsId,silent){randState.clsId=clsId;randState.pool=randStudentsOf(clsId).map(s=>s.id);randState.picked=[];if(!silent)renderRandom();}
 function toggleRandMode(){randState.removeMode=!randState.removeMode;renderRandom();}
 
-function doRandomPick(){
-  if(randState.spinning||!randState.pool.length)return;
-  randState.spinning=true;
-  const disp=document.getElementById('randResult');
-  let ticks=0;const total=14;
-  const spin=setInterval(()=>{
-    const rid=randState.pool[Math.floor(Math.random()*randState.pool.length)];
-    const s=DB.students.find(x=>x.id===rid);
-    if(disp&&s)disp.innerHTML=randCardHTML(s,true);
-    if(++ticks>=total){
-      clearInterval(spin);
-      const finalId=randState.pool[Math.floor(Math.random()*randState.pool.length)];
-      randState.picked.unshift(finalId);
-      if(randState.removeMode)randState.pool=randState.pool.filter(id=>id!==finalId);
-      randState.spinning=false;
-      typeof soundDone==='function'&&soundDone();
-      renderRandom();
-    }
-  },70);
-}
+function randomPick(){openRandom();}
 
 function renderRandom(){
   const ov=document.getElementById('randOverlay');if(!ov)return;
@@ -1540,7 +1521,7 @@ async function givePoints(id,delta){
    TOOLS
    ============================================================ */
 function renderTools(){setTopActions('');document.getElementById('page-tools').innerHTML=`
-    <div class="listcard"><h3>🎲 สุ่มเรียกชื่อ</h3><p class="meta" style="margin:4px 0 12px">สุ่มนักเรียนจากชั้นที่ใช้อยู่</p><button class="btn" onclick="randomPick()">เริ่มสุ่ม</button></div>
+    <div class="listcard"><h3>🎲 สุ่มเรียกชื่อ</h3><p class="meta" style="margin:4px 0 12px">เลือกห้อง แล้วสุ่มแบบลบคนที่โดนออก หรือเก็บไว้สุ่มต่อ</p><button class="btn" onclick="randomPick()">เริ่มสุ่ม</button></div>
     <div class="listcard"><h3>⏱ ตัวจับเวลา</h3><p class="meta" style="margin:4px 0 12px">กำหนดเวลาเองได้ มีเสียงเตือน</p><button class="btn orange" onclick="timerTool()">เปิดตัวจับเวลา</button></div>
     <div class="listcard"><h3>🔊 เครื่องวัดเสียง</h3><p class="meta" style="margin:4px 0 12px">วัดเสียงในห้อง (อนุญาตไมโครโฟน)</p><button class="btn green" onclick="soundMeter()">เปิดเครื่องวัดเสียง</button></div>`;}
 function randomPick(){const studs=clsStudents();if(!studs.length)return banner('ยังไม่มีนักเรียนในชั้นที่ใช้อยู่',true);
