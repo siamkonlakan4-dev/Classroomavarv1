@@ -191,6 +191,7 @@ body{font-size:clamp(15px,1.4vw,17px);padding-bottom:110px}
 .scard.picked{outline:3px solid var(--blue);outline-offset:-2px}
 .scard.locked{opacity:.5}
 .scard .pick{position:absolute;top:12px;right:11px;width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:2;box-shadow:0 2px 6px rgba(79,124,255,.4)}
+.scard .name{white-space:normal;line-height:1.25;word-break:break-word}
 .savebar{position:sticky;bottom:114px;margin-top:16px;display:flex;gap:10px;background:rgba(255,255,255,.93);backdrop-filter:blur(10px);padding:10px;border-radius:18px;box-shadow:0 6px 20px rgba(80,60,160,.16)}
 .savebar .btn{flex:1;padding:14px}
 .btn[disabled]{opacity:.4;pointer-events:none}
@@ -198,6 +199,7 @@ body{font-size:clamp(15px,1.4vw,17px);padding-bottom:110px}
 .idqr img,.idqr canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
 @media print{.page{max-width:none;margin:0}.topbar{max-width:none}}
 
+.scard .name{white-space:normal;line-height:1.25;word-break:break-word}
 </style>
 </head>
 <body>
@@ -1153,14 +1155,14 @@ function renderScan(){setTopActions('');const el=document.getElementById('page-s
 
   const manualBlock=studs.length
     ?`<div class="grid">${studs.map(s=>{const done=s.attendance?.[attKey(scanSubjId,scanDate)]||'';const picked=window._pending.has(s.id);
-        return`<div class="scard ${picked?'picked':''} ${done?'locked':''}" onclick="${done?`undoAtt('${s.id}')`:`togglePending('${s.id}')`}">${done?`<div class="att ${done}"></div>`:picked?`<div class="pick">✓</div>`:''}<div class="avatar">${avatarSVG(s.avatar,54)}</div><div class="name">${s.number}. ${esc(s.name.split(' ')[0])}</div><div class="code" style="color:${done?ATTCOLOR[done]:picked?'var(--blue)':'var(--label)'}">${done?'🔒 '+ATTLABEL[done]+' · แตะลบ':picked?'✓ เลือกแล้ว':'แตะเพื่อเลือก'}</div></div>`;
+        return`<div class="scard ${picked?'picked':''} ${done?'locked':''}" onclick="${done?`undoAtt('${s.id}')`:`togglePending('${s.id}')`}">${done?`<div class="att ${done}"></div>`:picked?`<div class="pick">✓</div>`:''}<div class="avatar">${avatarSVG(s.avatar,54)}</div><div class="name">${esc(s.name)}</div><div class="meta" style="font-size:11px">เลขที่ ${s.number}</div><div class="code" style="color:${done?ATTCOLOR[done]:picked?'var(--blue)':'var(--label)'}">${done?'🔒 '+ATTLABEL[done]+' · แตะลบ':picked?'✓ เลือกแล้ว':'แตะเพื่อเลือก'}</div></div>`;
       }).join('')}</div>
       <div class="savebar"><button class="btn green" ${window._pending.size?'':'disabled'} onclick="commitManual()">💾 บันทึก ${ATTLABEL[manualMode]} (${window._pending.size} คน)</button>${window._pending.size?`<button class="btn gray" onclick="clearPending()">ล้าง</button>`:''}</div>`
     :`<p class="meta">ห้องนี้ยังไม่มีนักเรียน</p>`;
 
   const workBlock=(()=>{const a=DB.assignments.find(x=>x.id===scanAssignId);if(!a)return'<p class="meta">ยังไม่ได้เลือกชิ้นงาน</p>';
     const subd=studs.filter(s=>a.scores?.[s.id]?.submittedAt);
-    return subd.length?`<p class="meta" style="margin:4px 0 10px">แตะนักเรียนเพื่อยกเลิกการรับงาน (กรณีผิดพลาด)</p><div class="grid">`+subd.map(s=>`<div class="scard locked" onclick="undoWork('${a.id}','${s.id}')"><div class="att present"></div><div class="avatar">${avatarSVG(s.avatar,54)}</div><div class="name">${s.number}. ${esc(s.name.split(' ')[0])}</div><div class="code" style="color:var(--green)">🔒 ส่งแล้ว · แตะลบ</div></div>`).join('')+`</div>`:'<p class="meta">ยังไม่มีใครส่งงาน</p>';})();
+    return subd.length?`<p class="meta" style="margin:4px 0 10px">แตะนักเรียนเพื่อยกเลิกการรับงาน (กรณีผิดพลาด)</p><div class="grid">`+subd.map(s=>`<div class="scard locked" onclick="undoWork('${a.id}','${s.id}')"><div class="att present"></div><div class="avatar">${avatarSVG(s.avatar,54)}</div><div class="name">${esc(s.name)}</div><div class="meta" style="font-size:11px">เลขที่ ${s.number}</div><div class="code" style="color:var(--green)">🔒 ส่งแล้ว · แตะลบ</div></div>`).join('')+`</div>`:'<p class="meta">ยังไม่มีใครส่งงาน</p>';})();
 
   el.innerHTML=`<div class="listcard">
       <div class="row" style="margin-bottom:10px"><button class="btn sm ${scanMode==='att'?'':'gray'}" onclick="window._pending.clear();scanMode='att';render()">เช็กชื่อ</button><button class="btn sm ${scanMode==='work'?'':'gray'}" onclick="window._pending.clear();scanMode='work';render()">รับงาน</button></div>
