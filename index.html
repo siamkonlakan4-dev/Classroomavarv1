@@ -200,6 +200,10 @@ body{font-size:clamp(15px,1.4vw,17px);padding-bottom:110px}
 @media print{.page{max-width:none;margin:0}.topbar{max-width:none}}
 
 .scard .name{white-space:normal;line-height:1.25;word-break:break-word}
+.rand-ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-start;justify-content:center;z-index:9999;padding:20px;overflow:auto}
+.rand-box{background:#fff;border-radius:20px;padding:20px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.rand-result{text-align:center;background:#f5f6fa;border-radius:16px;padding:20px;min-height:120px;display:flex;flex-direction:column;justify-content:center}
+
 </style>
 </head>
 <body>
@@ -1008,7 +1012,63 @@ async function delSubject(id){
   logAction({type:'subject',detail:'ลบรายวิชา'});
   closeModal();render();banner('ลบแล้ว');
 }
+// ===== สุ่มเรียกชื่อ =====
+let randState={clsId:null,pool:[],picked:[],removeMode:true,spinning:false};
 
+// ปรับ randClassList ให้ตรงกับ helper กรองห้องตามสิทธิ์ ถ้ามี (เช่น myClasses())
+function randClassList(){return (DB.classrooms||[]).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','th'));}
+function randStudentsOf(clsId){return (DB.students||[]).filter(s=>s.classroomId===clsId).sort((a,b)=>(+a.number||0)-(+b.number||0));}
+
+function randCardHTML(s,big){return `<div class="avatar" style="margin:0 auto ${big?'14':'8'}px">${avatarSVG(s.avatar,big?110:54)}</div><div style="font-size:${big?'26':'18'}px;font-weight:700">${esc(s.name)}</div><div class="meta">เลขที่ ${s.number}</div>`;}
+
+function openRandom(){const cls=randClassList();if(!randState.clsId&&cls[0])randState.clsId=cls[0].id;randSelectCls(randState.clsId,true);let ov=document.getElementById('randOverlay');if(!ov){ov=document.createElement('div');ov.id='randOverlay';ov.className='rand-ov';document.body.appendChild(ov);}ov.style.display='flex';renderRandom();}
+function closeRandom(){const ov=document.getElementById('randOverlay');if(ov)ov.style.display='none';}
+function randSelectCls(clsId,silent){randState.clsId=clsId;randState.pool=randStudentsOf(clsId).map(s=>s.id);randState.picked=[];if(!silent)renderRandom();}
+function toggleRandMode(){randState.removeMode=!randState.removeMode;renderRandom();}
+
+function doRandomPick(){
+  if(randState.spinning||!randState.pool.length)return;
+  randState.spinning=true;
+  const disp=document.getElementById('randResult');
+  let ticks=0;const total=14;
+  const spin=setInterval(()=>{
+    const rid=randState.pool[Math.floor(Math.random()*randState.pool.length)];
+    const s=DB.students.find(x=>x.id===rid);
+    if(disp&&s)disp.innerHTML=randCardHTML(s,true);
+    if(++ticks>=total){
+      clearInterval(spin);
+      const finalId=randState.pool[Math.floor(Math.random()*randState.pool.length)];
+      randState.picked.unshift(finalId);
+      if(randState.removeMode)randState.pool=randState.pool.filter(id=>id!==finalId);
+      randState.spinning=false;
+      typeof soundDone==='function'&&soundDone();
+      renderRandom();
+    }
+  },70);
+}
+
+function renderRandom(){
+  const ov=document.getElementById('randOverlay');if(!ov)return;
+  const cls=randClassList();
+  const clsName=clsById(randState.clsId)?.name||'—';
+  const total=randStudentsOf(randState.clsId).length;
+  const last=randState.picked[0]?DB.students.find(x=>x.id===randState.picked[0]):null;
+  const done=randState.removeMode&&!randState.pool.length&&total>0;
+  ov.innerHTML=`<div class="rand-box">
+    <div class="row" style="justify-content:space-between;align-items:center"><h3 style="margin:0">🎲 สุ่มเรียกชื่อ</h3><button class="btn gray sm" onclick="closeRandom()">✕ ปิด</button></div>
+    <label class="fl">เลือกห้อง</label>
+    <select onchange="randSelectCls(this.value)">${cls.map(c=>`<option value="${c.id}" ${c.id===randState.clsId?'selected':''}>${esc(c.name)}</option>`).join('')||'<option>— ไม่มีห้อง —</option>'}</select>
+    <div class="row" style="margin:8px 0">
+      <button class="btn sm ${randState.removeMode?'purple':'gray'}" onclick="if(!randState.removeMode)toggleRandMode()">ลบคนที่สุ่มโดนออก</button>
+      <button class="btn sm ${!randState.removeMode?'green':'gray'}" onclick="if(randState.removeMode)toggleRandMode()">เก็บไว้สุ่มต่อ</button>
+    </div>
+    <div class="meta" style="margin-bottom:8px">👧 ${esc(clsName)} · ${total} คน · ${randState.removeMode?`เหลือ ${randState.pool.length} คน`:'สุ่มได้ทุกคน (มีซ้ำ)'} · สุ่มไปแล้ว ${randState.picked.length} ครั้ง</div>
+    <div id="randResult" class="rand-result">${last?randCardHTML(last,true):'<div class="meta" style="padding:30px 0">กดปุ่มเพื่อเริ่มสุ่ม</div>'}</div>
+    <button class="btn ${done?'gray':''}" style="width:100%;margin-top:12px;font-size:18px;padding:14px" ${done?'disabled':''} onclick="doRandomPick()">${done?'✅ ครบทุกคนแล้ว':'🎲 สุ่ม'}</button>
+    ${done?`<button class="btn gray" style="width:100%;margin-top:8px" onclick="randSelectCls(randState.clsId)">🔄 เริ่มรอบใหม่</button>`:''}
+    ${randState.picked.length?`<div style="margin-top:14px"><div class="fl">ประวัติการสุ่ม (ล่าสุดก่อน)</div>${randState.picked.map((id,i)=>{const s=DB.students.find(x=>x.id===id);return s?`<div class="logrow"><span class="meta" style="width:24px">${randState.picked.length-i}.</span><div style="flex:1"><b>${esc(s.name)}</b> <span class="meta">เลขที่ ${s.number}</span></div></div>`:'';}).join('')}</div>`:''}
+  </div>`;
+}
 /* ---------- ASSIGNMENT ---------- */
 function assignModal(id){const a=id?DB.assignments.find(x=>x.id===id):null;const sub=subjById(assignSubj);
   openModal(`<h2>${a?'แก้ไข':'สร้าง'}ชิ้นงาน</h2><p class="meta" style="margin-bottom:12px">รายวิชา: <b>${esc(sub?.name||'')}</b></p>
@@ -1060,6 +1120,8 @@ async function setNote(aid,sid,v){
   await saveScoreRow(aid,sid);
 }
 
+
+  
 
 /* ============================================================
    SCAN
