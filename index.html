@@ -319,6 +319,7 @@ function codeExists(code,exceptId){if(!code)return false;return DB.students.some
 const isAdmin=()=>session?.role==='admin';
 const isTeacher=()=>session?.role==='teacher';
 const isStudent=()=>session?.role==='student';
+const isStaff=()=>session?.role==='admin'||session?.role==='teacher';
 const userById=id=>DB.users.find(u=>u.id===id);
 function myClassrooms(){return isAdmin()?DB.classrooms.slice():DB.classrooms.filter(c=>c.ownerId===session.id||(c.teacherIds||[]).includes(session.id));}
 function canSeeClass(cid){const c=clsById(cid);return c&&(isAdmin()||c.ownerId===session.id||(c.teacherIds||[]).includes(session.id));}
