@@ -239,7 +239,7 @@ body{font-size:clamp(15px,1.4vw,17px);padding-bottom:110px}
     <div class="login-logo" style="background:var(--gGreen)">🔐</div>
     <h1>ตั้งรหัสผ่านใหม่</h1>
     <p class="login-sub" id="fcName">เพื่อความปลอดภัย กรุณาตั้งรหัสผ่านส่วนตัว</p>
-    <input id="fcPass" type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 4 ตัว)" onkeydown="if(event.key==='Enter')submitForceChange()">
+    <input id="fcPass" type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)" onkeydown="if(event.key==='Enter')submitForceChange()">
     <input id="fcPass2" type="password" placeholder="ยืนยันรหัสผ่านอีกครั้ง" onkeydown="if(event.key==='Enter')submitForceChange()">
     <button class="btn" style="width:100%;margin-top:4px" onclick="submitForceChange()">บันทึกรหัสผ่าน</button>
     <button class="btn gray" style="width:100%;margin-top:8px" onclick="logout()">ออกจากระบบ</button>
