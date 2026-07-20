@@ -166,14 +166,25 @@
   .idqr img,.idqr canvas{width:100%;height:100%;display:block}
   #reportPrint{display:none}
   @media print{
-    .topbar,.tabbar,.noprint,.modal-bg,.banner,.popup-bg,.login-screen{display:none!important}
-    .page{display:none!important}
-    body{padding:0;background:#fff}
-    body.print-cards #page-print{display:block!important;padding:0}
-    body.print-report #reportPrint{display:block!important;padding:10mm}
-    .cardgrid{grid-template-columns:repeat(2,86mm);gap:5mm;padding:8mm}
-    .idcard{width:86mm;height:54mm;max-width:none;aspect-ratio:auto;page-break-inside:avoid}
+  @page{
+    size:A4;
+    margin:15mm 12mm 18mm 12mm;
+    @top-right{content:"หน้า " counter(page) " / " counter(pages);font-family:'Sarabun',sans-serif;font-size:11px;color:#555;}
   }
+  .topbar,.tabbar,.noprint,.modal-bg,.banner,.popup-bg,.login-screen,.rand-ov{display:none!important}
+  .page{display:none!important}
+  body{padding:0;background:#fff;color:#000;font-family:'Sarabun',sans-serif;font-size:13px}
+  body.print-cards #page-print{display:block!important;padding:0}
+  body.print-report #reportPrint{display:block!important;padding:0}
+  .cardgrid{grid-template-columns:repeat(2,86mm);gap:5mm;padding:8mm}
+  .idcard{width:86mm;height:54mm;max-width:none;aspect-ratio:auto;page-break-inside:avoid}
+  .rpt-table{width:100%;border-collapse:collapse;font-size:13px}
+  .rpt-table thead{display:table-header-group}
+  .rpt-table th,.rpt-table td{border:1px solid #333;padding:5px 7px;text-align:left;vertical-align:middle}
+  .rpt-table th{background:#e8eefc!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-weight:600}
+  .rpt-table tbody tr{page-break-inside:avoid}
+  .rpt-sign{page-break-inside:avoid}
+}
   /* ===== UI tuning + เช็กชื่อแบบยืนยัน + QR ===== */
 body{font-size:clamp(15px,1.4vw,17px);padding-bottom:110px}
 .page{max-width:var(--maxw);margin:0 auto;padding:clamp(14px,3.5vw,24px) clamp(14px,4vw,24px) 26px}
@@ -1222,9 +1233,20 @@ function renderScan(){setTopActions('');const el=document.getElementById('page-s
       <div class="savebar"><button class="btn green" ${window._pending.size?'':'disabled'} onclick="commitManual()">💾 บันทึก ${ATTLABEL[manualMode]} (${window._pending.size} คน)</button>${window._pending.size?`<button class="btn gray" onclick="clearPending()">ล้าง</button>`:''}</div>`
     :`<p class="meta">ห้องนี้ยังไม่มีนักเรียน</p>`;
 
-  const workBlock=(()=>{const a=DB.assignments.find(x=>x.id===scanAssignId);if(!a)return'<p class="meta">ยังไม่ได้เลือกชิ้นงาน</p>';
-    const subd=studs.filter(s=>a.scores?.[s.id]?.submittedAt);
-    return subd.length?`<p class="meta" style="margin:4px 0 10px">แตะนักเรียนเพื่อยกเลิกการรับงาน (กรณีผิดพลาด)</p><div class="grid">`+subd.map(s=>`<div class="scard locked" onclick="undoWork('${a.id}','${s.id}')"><div class="att present"></div><div class="avatar">${avatarSVG(s.avatar,54)}</div><div class="name">${esc(s.name)}</div><div class="meta" style="font-size:11px">เลขที่ ${s.number}</div><div class="code" style="color:var(--green)">🔒 ส่งแล้ว · แตะลบ</div></div>`).join('')+`</div>`:'<p class="meta">ยังไม่มีใครส่งงาน</p>';})();
+  const workBlock=(()=>{
+  const a=DB.assignments.find(x=>x.id===scanAssignId);
+  if(!a)return'<p class="meta">ยังไม่ได้เลือกชิ้นงาน</p>';
+  if(!studs.length)return'<p class="meta">ห้องนี้ยังไม่มีนักเรียน</p>';
+  const grid=`<div class="grid">${studs.map(s=>{
+    const sc=a.scores?.[s.id]||{};const submitted=!!sc.submittedAt;const graded=submitted&&sc.value!=null;
+    const picked=window._pending.has(s.id);
+    const label=submitted?(graded?`🔒 ตรวจแล้ว ${sc.value}/${a.fullScore} · แตะลบ`:'🔒 ส่งแล้ว (รอตรวจ) · แตะลบ'):picked?'✓ เลือกแล้ว':'แตะเพื่อเลือก';
+    const col=submitted?'var(--green)':picked?'var(--blue)':'var(--label)';
+    return`<div class="scard ${picked?'picked':''} ${submitted?'locked':''}" onclick="${submitted?`undoWork('${a.id}','${s.id}')`:`togglePending('${s.id}')`}">${submitted?`<div class="att present"></div>`:picked?`<div class="pick">✓</div>`:''}<div class="avatar">${avatarSVG(s.avatar,54)}</div><div class="name">${esc(s.name)}</div><div class="meta" style="font-size:11px">เลขที่ ${s.number}</div><div class="code" style="color:${col}">${label}</div></div>`;
+  }).join('')}</div>`;
+  const bar=`<div class="savebar"><button class="btn green" ${window._pending.size?'':'disabled'} onclick="commitWork()">💾 บันทึกการส่งงาน (${window._pending.size} คน)</button>${window._pending.size?`<button class="btn gray" onclick="clearPending()">ล้าง</button>`:''}</div>`;
+  return grid+bar;
+  })();
 
   el.innerHTML=`<div class="listcard">
       <div class="row" style="margin-bottom:10px"><button class="btn sm ${scanMode==='att'?'':'gray'}" onclick="window._pending.clear();scanMode='att';render()">เช็กชื่อ</button><button class="btn sm ${scanMode==='work'?'':'gray'}" onclick="window._pending.clear();scanMode='work';render()">รับงาน</button></div>
@@ -1235,12 +1257,14 @@ function renderScan(){setTopActions('');const el=document.getElementById('page-s
       <div class="row"><input id="codeIn" placeholder="เช่น 12345" style="margin:0;flex:1" onkeydown="if(event.key==='Enter')markByCode()"><button class="btn green" onclick="markByCode()">บันทึก</button></div>
       <div id="reader" style="border-radius:14px;overflow:hidden;margin-top:12px"></div>
       <div class="row" style="margin-top:10px"><button class="btn" onclick="startScanner()">เปิดกล้องยิง QR</button><button class="btn gray" onclick="stopScanner();render()">หยุด</button></div></div>
-    ${scanMode==='att'
+        ${scanMode==='att'
       ?`<div class="listcard"><h3>👆 เช็กชื่อด้วยมือ</h3>
           <p class="meta" style="margin:4px 0 10px">1) เลือกสถานะ → 2) แตะเลือกนักเรียน (เลือกได้หลายคน) → 3) กดบันทึก · คนที่เช็กแล้วจะล็อก 🔒 กันเช็กซ้ำ</p>
           <div class="row" style="margin-bottom:12px">${modes.map(([k,lb,c])=>`<button class="btn sm ${manualMode===k?c:'gray'}" onclick="setManualMode('${k}')">${lb}</button>`).join('')}</div>
           ${manualBlock}</div>`
-      :`<div class="listcard"><h3>📦 รายชื่อที่ส่งงานแล้ว</h3>${workBlock}</div>`}
+      :`<div class="listcard"><h3>👆 รับงานหลายคน</h3>
+          <p class="meta" style="margin:4px 0 10px">1) เลือกชิ้นงานด้านบน → 2) แตะเลือกนักเรียน (เลือกได้หลายคน) → 3) กดบันทึก · คนที่ส่งแล้วจะล็อก 🔒 แตะซ้ำเพื่อยกเลิก</p>
+          ${workBlock}</div>`}
     <div class="listcard"><h3>🕒 ประวัติล่าสุด</h3>${recent.length?recent.map(l=>`<div class="logrow"><span class="ld" style="background:${l.status?ATTCOLOR[l.status]:'var(--blue)'}"></span><div style="flex:1"><b>${esc(l.name)}</b><div class="meta">${esc(l.subject||'')} · ${esc(l.detail||'')}</div></div><span class="meta">${thDateTime(l.at).split(' ').slice(-1)[0]}</span></div>`).join(''):'<p class="meta">ยังไม่มีรายการ</p>'}</div>`;}
 
 async function undoAtt(id){const ctx=scanCtx();if(!ctx)return;
@@ -1279,6 +1303,25 @@ async function commitManual(){const ctx=scanCtx();if(!ctx||!window._pending.size
   marked.forEach(s=>{s.attendance[k]=manualMode;logAction({type:'att',name:s.name,classroom:ctx.cls.name,subject:ctx.sub?.name||'',status:manualMode,detail:ATTLABEL[manualMode]});});
   window._pending.clear();render();soundDone();banner(`บันทึก "${ATTLABEL[manualMode]}" ${marked.length} คนเรียบร้อย`);}
 
+async function commitWork(){
+  const ctx=scanCtx();if(!ctx||!window._pending.size)return;
+  const a=DB.assignments.find(x=>x.id===scanAssignId);
+  if(!a)return banner('ยังไม่ได้เลือกชิ้นงาน',true);
+  const ids=[...window._pending];
+  if(!confirm(`บันทึกการส่งงาน "${a.name}" ให้นักเรียน ${ids.length} คน?\n(บันทึกแล้วจะล็อก แตะซ้ำเพื่อยกเลิกได้)`))return;
+  const now=new Date().toISOString();const rows=[],marked=[];
+  ids.forEach(id=>{const s=DB.students.find(x=>x.id===id);if(!s)return;
+    a.scores=a.scores||{};a.scores[id]=a.scores[id]||{};
+    if(a.scores[id].submittedAt)return;
+    const c=a.scores[id];
+    rows.push({assignment_id:a.id,student_id:id,value:(c.value==null||c.value==='')?null:+c.value,note:c.note||null,submitted_at:now});
+    marked.push(s);});
+  if(!rows.length){window._pending.clear();render();return;}
+  const {error}=await sb.from('scores').upsert(rows,{onConflict:'assignment_id,student_id'});
+  if(error)return banner('บันทึกไม่สำเร็จ: '+error.message,true);
+  marked.forEach(s=>{a.scores[s.id].submittedAt=now;logAction({type:'work',name:s.name,classroom:ctx.cls.name,subject:ctx.sub?.name||'',detail:'รับงาน: '+a.name});});
+  window._pending.clear();render();soundDone();banner(`บันทึกการส่งงาน ${marked.length} คนเรียบร้อย`);
+}  
 /* ============================================================
    RANKING
    ============================================================ */
@@ -1325,11 +1368,75 @@ function buildReportHTML(cls,subs,studs){
       <div class="listcard"><h3>📋 รายชื่อ (${studs.length} คน)</h3>${studs.map(s=>{const st=statusOf(s);return`<div class="reprow"><div style="width:30px">${avatarSVG(s.avatar,30)}</div><div style="flex:1;font-size:14px">${s.number}. ${esc(s.name)}<div class="meta">${esc(s.code||'')}</div></div><span class="pill" style="background:${st?ATTCOLOR[st]:'var(--sep)'};color:${st?'#fff':'var(--label)'}">${st?ATTLABEL[st]:'ยังไม่เช็ก'}</span></div>`;}).join('')}</div>`;}
   else{const subList=repSubj==='all'?subs.map(s=>s.id):[repSubj];const asgs=DB.assignments.filter(a=>subList.includes(a.subjectId));const subOf=stu=>asgs.filter(a=>a.scores?.[stu.id]?.submittedAt).length;const totalA=asgs.length;
     return`<div class="listcard"><h3>📦 สรุปการส่งงาน</h3><div class="meta" style="margin-bottom:6px">${esc(cls.name)} · ${totalA} ชิ้นงาน</div>${studs.map(s=>{const n=subOf(s);const pct=totalA?Math.round(n/totalA*100):0;return`<div style="margin:9px 0"><div class="row"><span style="font-size:13px">${s.number}. ${esc(s.name)}</span><div class="spacer"></div><b>${n}/${totalA}</b></div><div style="background:var(--sep);border-radius:8px;height:9px;margin-top:4px"><div style="width:${pct}%;height:100%;background:var(--gGreen);border-radius:8px"></div></div></div>`;}).join('')}</div>`;}}
-function printReport(){const cls=clsById(repCls);const subs=subjectsOf(repCls);const studs=studentsOf(repCls);
-  const logo=DB.logo?`<img src="${esc(DB.logo)}" style="width:46px;height:46px;border-radius:8px;object-fit:cover;vertical-align:middle;margin-right:8px">`:'';
-  document.getElementById('reportPrint').innerHTML=`<div style="text-align:center;margin-bottom:14px">${logo}<h2 style="margin:6px 0 0;display:inline-block;vertical-align:middle">${esc(DB.systemName)}</h2><div style="font-size:14px;color:#666">${esc(DB.school)}</div><div style="font-size:15px;margin-top:4px">รายงาน${repMode==='att'?'การมาเรียน':'การส่งงาน'} · ${esc(cls.name)}</div></div>${buildReportHTML(cls,subs,studs)}`;
-  document.body.classList.add('print-report');window.print();}
-window.onafterprint=()=>document.body.classList.remove('print-cards','print-report');
+function printReport(){
+  const cls=clsById(repCls);const subs=subjectsOf(repCls);const studs=studentsOf(repCls);
+  document.getElementById('reportPrint').innerHTML=buildReportPrintHTML(cls,subs,studs);
+  document.body.classList.add('print-report');window.print();
+}
+
+function reportPrintShell(title,sub2,headCols,bodyRows,summary,teacherName,meName,printedAt){
+  const logo=DB.logo?`<img src="${esc(DB.logo)}" style="width:15mm;height:15mm;border-radius:3mm;object-fit:cover">`:'';
+  return `
+  <table class="rpt-table">
+    <thead>
+      <tr><th colspan="9" style="border:none;background:#fff;padding:0 0 6px">
+        <div style="text-align:center">
+          ${logo?`<div style="margin-bottom:2mm">${logo}</div>`:''}
+          <div style="font-size:17px;font-weight:700">${esc(DB.systemName)}</div>
+          <div style="font-size:13px">${esc(DB.school||'')}</div>
+          <div style="font-size:15px;font-weight:600;margin-top:3px">${title}</div>
+          <div style="font-size:12px;color:#333">${sub2}</div>
+        </div>
+      </th></tr>
+      <tr>${headCols}</tr>
+    </thead>
+    <tbody>${bodyRows}</tbody>
+  </table>
+  ${summary||''}
+  <div class="rpt-sign">
+    <div style="display:flex;justify-content:space-between;gap:18mm;margin-top:16mm">
+      <div style="text-align:center;flex:1">
+        <div>ลงชื่อ ..............................................</div>
+        <div style="margin-top:5px">( ${esc(meName||'.......................................')} )</div>
+        <div style="margin-top:2px">ผู้พิมพ์</div>
+      </div>
+      <div style="text-align:center;flex:1">
+        <div>ลงชื่อ ..............................................</div>
+        <div style="margin-top:5px">( ${esc(teacherName)} )</div>
+        <div style="margin-top:2px">ครูประจำชั้น</div>
+      </div>
+    </div>
+    <div style="text-align:right;font-size:11px;color:#555;margin-top:12mm">พิมพ์เมื่อ ${printedAt}</div>
+  </div>`;
+}
+
+function buildReportPrintHTML(cls,subs,studs){
+  const printedAt=thDateTime(new Date().toISOString());
+  const owner=userById(cls.ownerId);
+  const teacherName=owner?.name||'.......................................';
+  const meName=session?.name||'';
+  if(repMode==='att'){
+    const subList=repSubj==='all'?subs.map(s=>s.id):[repSubj];
+    const statusOf=stu=>{for(const sid of subList){const v=(stu.attendance||{})[attKey(sid,repDate)];if(v)return v;}return'';};
+    const subName=repSubj==='all'?'ทุกวิชา':esc(subs.find(s=>s.id===repSubj)?.name||'');
+    const title=`รายงานการมาเรียน · ${esc(cls.name)}`;
+    const sub2=`${subName} · วันที่ ${thDate(repDate)}`;
+    const headCols=`<th style="width:12mm;text-align:center">เลขที่</th><th>ชื่อ - นามสกุล</th><th style="width:26mm;text-align:center">รหัสนักเรียน</th><th style="width:26mm;text-align:center">สถานะ</th>`;
+    const cnt={present:0,late:0,absent:0,skip:0,leave:0,none:0};
+    const bodyRows=studs.map(s=>{const st=statusOf(s);cnt[st||'none']++;return`<tr><td style="text-align:center">${esc(s.number)}</td><td>${esc(s.name)}</td><td style="text-align:center">${esc(s.code||'')}</td><td style="text-align:center">${st?ATTLABEL[st]:'ยังไม่เช็ก'}</td></tr>`;}).join('');
+    const summary=`<p style="margin:8px 0 0;font-size:12px">สรุป: มา ${cnt.present} · สาย ${cnt.late} · ขาด ${cnt.absent} · หนี ${cnt.skip} · ลา ${cnt.leave} · ยังไม่เช็ก ${cnt.none} · รวม ${studs.length} คน</p>`;
+    return reportPrintShell(title,sub2,headCols,bodyRows,summary,teacherName,meName,printedAt);
+  }else{
+    const subList=repSubj==='all'?subs.map(s=>s.id):[repSubj];
+    const asgs=DB.assignments.filter(a=>subList.includes(a.subjectId));const totalA=asgs.length;
+    const subName=repSubj==='all'?'ทุกวิชา':esc(subs.find(s=>s.id===repSubj)?.name||'');
+    const title=`รายงานการส่งงาน · ${esc(cls.name)}`;
+    const sub2=`${subName} · ${totalA} ชิ้นงาน`;
+    const headCols=`<th style="width:12mm;text-align:center">เลขที่</th><th>ชื่อ - นามสกุล</th><th style="width:26mm;text-align:center">รหัสนักเรียน</th><th style="width:22mm;text-align:center">ส่งแล้ว</th><th style="width:18mm;text-align:center">ร้อยละ</th>`;
+    const bodyRows=studs.map(s=>{const n=asgs.filter(a=>a.scores?.[s.id]?.submittedAt).length;const pct=totalA?Math.round(n/totalA*100):0;return`<tr><td style="text-align:center">${esc(s.number)}</td><td>${esc(s.name)}</td><td style="text-align:center">${esc(s.code||'')}</td><td style="text-align:center">${n}/${totalA}</td><td style="text-align:center">${pct}%</td></tr>`;}).join('');
+    return reportPrintShell(title,sub2,headCols,bodyRows,'',teacherName,meName,printedAt);
+  }
+}
 
 /* ============================================================
    STATS
