@@ -21,6 +21,7 @@
     --gRed:linear-gradient(135deg,#ff7a7a,#ff3b3b);--gOrange:linear-gradient(135deg,#ffc34d,#ff8a00);
     --gPurple:linear-gradient(135deg,#c98bff,#9b5cff);--gPink:linear-gradient(135deg,#ff9ec4,#ff5fa2);--gGold:linear-gradient(135deg,#ffe07a,#ffb300);
     --gTeal:linear-gradient(135deg,#34e0e0,#0ea5e9);--gSlate:linear-gradient(135deg,#94a3b8,#475569);
+    --maxw:min(720px,100%);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{margin:0;color:var(--text);min-height:100vh;font-weight:400;background:linear-gradient(180deg,var(--bg1),var(--bg2) 42%,var(--bg3));background-attachment:fixed;font-family:'Sarabun',-apple-system,"Noto Sans Thai",sans-serif;padding-bottom:90px}
@@ -48,7 +49,7 @@
   .btn.sm{padding:8px 13px;font-size:13px;border-radius:11px}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .spacer{flex:1}
-  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(min(140px,100%),1fr))}
   .scard{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:15px 12px 13px;position:relative;text-align:center;cursor:pointer;transition:.18s;overflow:hidden;border:1px solid rgba(150,140,200,.08)}
   .scard::after{content:"";position:absolute;top:0;left:0;right:0;height:5px;background:var(--gBlue);opacity:.9}
   .scard:active{transform:scale(.96)}
@@ -173,13 +174,13 @@
     .idcard{width:86mm;height:54mm;max-width:none;aspect-ratio:auto;page-break-inside:avoid}
   }
   /* ===== UI tuning + เช็กชื่อแบบยืนยัน + QR ===== */
-body{font-size:16.5px;padding-bottom:110px}
-.page{max-width:640px;margin:0 auto;padding:18px 18px 26px}
-.topbar{max-width:660px;margin:0 auto;padding:13px 16px}
+body{font-size:clamp(15px,1.4vw,17px);padding-bottom:110px}
+.page{max-width:var(--maxw);margin:0 auto;padding:clamp(14px,3.5vw,24px) clamp(14px,4vw,24px) 26px}
+.topbar{max-width:var(--maxw);margin:0 auto;padding:13px clamp(14px,4vw,20px)}
 .brandname{font-size:18px;max-width:46vw}
 .topbar .sub{font-size:13px}
 .logo{width:46px;height:46px}
-.tabbar{max-width:660px;margin:0 auto;padding:10px 6px env(safe-area-inset-bottom)}
+.tabbar{max-width:var(--maxw);margin:0 auto;padding:10px 6px env(safe-area-inset-bottom)}
 .tab{min-width:62px;font-size:11.5px;font-weight:600;padding:4px 2px}
 .tab .ico{width:48px;height:48px;border-radius:15px;margin:0 auto 4px}
 .tab .ico svg{width:27px;height:27px}
