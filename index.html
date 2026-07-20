@@ -1330,16 +1330,29 @@ function renderRank(){setTopActions('');const el=document.getElementById('page-r
   if(!mine.length){el.innerHTML=`<div class="empty"><div class="big">🏆</div>ยังไม่มีชั้นเรียน</div>`;return;}
   if(!rankCls||!mine.find(c=>c.id===rankCls))rankCls=activeClassId||mine[0].id;
   const studs=studentsOf(rankCls);
-  const modes=[['score','คะแนนรวม','📊'],['att','การเข้าเรียน','📅'],['points','แต้มสะสม','⭐']];
+  const modes=[['score','คะแนนรวม','📊'],['att','การเข้าเรียน','📅'],['work','การส่งงาน','📝'],['points','แต้มสะสม','⭐']];
   let ranked,fmt,maxv;
   if(rankMode==='score'){ranked=studs.map(s=>({s,v:gradeOf(s).total,sub:'เกรด '+gradeOf(s).grade})).sort((a,b)=>b.v-a.v);maxv=100;fmt=r=>`${r.v}<small>${r.sub}</small>`;}
   else if(rankMode==='att'){ranked=studs.map(s=>{const a=attStats(s);return{s,v:a.rate,sub:`มา ${a.p} · สาย ${a.l} · ขาด ${a.a}`};}).sort((a,b)=>b.v-a.v);maxv=100;fmt=r=>`${r.v}%<small>${r.sub}</small>`;}
+  else if(rankMode==='work'){ranked=workRankData(rankCls).map(r=>({s:r.s,v:r.pct,sub:`ส่งแล้ว ${r.submitted}/${r.total} ชิ้น`}));maxv=100;fmt=r=>`${r.v}%<small>${r.sub}</small>`;}
   else{ranked=studs.map(s=>({s,v:s.points||0})).sort((a,b)=>b.v-a.v);maxv=Math.max(...studs.map(s=>s.points||0),1);fmt=r=>`${r.v}<small>แต้ม</small>`;}
   const medal=i=>i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="font-size:14px;color:var(--label)">${i+1}</span>`;
   el.innerHTML=`<div class="selbar"><label class="fl">ชั้นเรียน</label><select style="margin:0" onchange="rankCls=this.value;render()">${mine.map(c=>`<option value="${c.id}" ${c.id===rankCls?'selected':''}>${esc(c.name)} (${esc(c.year)})</option>`).join('')}</select></div>
     <div class="subtabs">${modes.map(([k,lb,ic])=>`<button class="subtab ${rankMode===k?'active':''}" onclick="rankMode='${k}';render()">${ic} ${lb}</button>`).join('')}</div>
     ${studs.length?`<div class="listcard">${ranked.map((r,i)=>`<div class="rankrow ${i<3?'top'+(i+1):''}"><div class="rankpos">${medal(i)}</div><div class="rankav">${avatarSVG(r.s.avatar,46)}</div><div class="rankname">${r.s.number}. ${esc(r.s.name)}<div class="rankbar"><div style="width:${Math.min(100,r.v/maxv*100)}%"></div></div></div><div class="rankval">${fmt(r)}</div>${isStaff()?`<button class="btn sm gray" style="margin-left:8px;flex:0 0 auto" onclick="pointsModal('${r.s.id}')">⭐</button>`:''}</div>`).join('')}</div>`:`<div class="empty"><div class="big">🏆</div>ห้องนี้ยังไม่มีนักเรียน</div>`}`;}
-
+function workRankData(clsId){
+  const subs=subjectsOf(clsId);const subIds=subs.map(s=>s.id);
+  const asgs=DB.assignments.filter(a=>subIds.includes(a.subjectId));const total=asgs.length;
+  return studentsOf(clsId).map(s=>{
+    const n=asgs.filter(a=>a.scores?.[s.id]?.submittedAt).length;
+    return{s,submitted:n,total,pct:total?Math.round(n/total*100):0};
+  }).sort((a,b)=>b.submitted-a.submitted||a.s.number-b.s.number);
+}
+function workRankHTML(clsId){
+  const rows=workRankData(clsId);if(!rows.length)return'<p class="meta">ยังไม่มีนักเรียน</p>';
+  const medal=i=>i===0?'🥇':i===1?'🥈':i===2?'🥉':`<b style="width:24px;display:inline-block;text-align:center">${i+1}</b>`;
+  return rows.map((r,i)=>`<div class="reprow"><span style="width:30px;text-align:center">${medal(i)}</span><div style="width:30px">${avatarSVG(r.s.avatar,30)}</div><div style="flex:1;font-size:14px">${esc(r.s.name)}<div class="meta">ส่งแล้ว ${r.submitted}/${r.total} ชิ้น</div></div><b style="color:${r.pct>=80?'var(--green)':r.pct>=50?'var(--orange)':'var(--red)'}">${r.pct}%</b></div>`).join('');
+}
 /* ============================================================
    REPORT
    ============================================================ */
@@ -1374,7 +1387,8 @@ function attAgg(stu,subList,start,end){
     if(c[v]!=null){c[v]++;tot++;}
   });
   const rate=tot?Math.round((c.present+c.late*.5)/tot*100):0;
-  return{...c,tot,rate};
+  const attendPct=tot?Math.round((c.present+c.late+c.leave)/tot*100):0;
+  return{...c,tot,rate,attendPct};
 }
 function workHistoryHTML(subs,studs){
   const subList=repSubj==='all'?subs.map(s=>s.id):[repSubj];
@@ -1427,7 +1441,7 @@ function buildReportHTML(cls,subs,studs){
     const tot={present:0,late:0,absent:0,skip:0,leave:0};rows.forEach(r=>['present','late','absent','skip','leave'].forEach(k=>tot[k]+=r.a[k]));
     return`<div class="listcard"><h3>📅 สรุปการมาเรียน · ${rng.label}</h3><div class="meta" style="margin-bottom:8px">${esc(cls.name)} · ${subName} · ${rng.start} ถึง ${rng.end}</div>
       <div class="row"><span class="pill" style="background:#eafbf0;color:#16a34a">มา ${tot.present}</span><span class="pill" style="background:#fff3e0;color:#e07a00">สาย ${tot.late}</span><span class="pill" style="background:#ffe9e9;color:var(--red)">ขาด ${tot.absent}</span><span class="pill" style="background:#f3eafe;color:var(--purple)">หนี ${tot.skip}</span><span class="pill" style="background:#e0f4ff;color:#0284c7">ลา ${tot.leave}</span></div></div>
-      <div class="listcard"><h3>📋 รายคน (${studs.length} คน)</h3>${rows.map(({s,a})=>`<div class="reprow"><div style="width:30px">${avatarSVG(s.avatar,30)}</div><div style="flex:1;font-size:14px">${s.number}. ${esc(s.name)}<div class="meta">มา ${a.present} · สาย ${a.late} · ขาด ${a.absent} · หนี ${a.skip} · ลา ${a.leave} · รวม ${a.tot} ครั้ง</div></div><b style="color:${a.rate>=80?'var(--green)':a.rate>=60?'var(--orange)':'var(--red)'}">${a.rate}%</b></div>`).join('')}</div>`;
+      <div class="listcard"><h3>📋 รายคน (${studs.length} คน)</h3>${rows.map(({s,a})=>`<div class="reprow"><div style="width:30px">${avatarSVG(s.avatar,30)}</div><div style="flex:1;font-size:14px">${s.number}. ${esc(s.name)}<div class="meta">มา ${a.present} · สาย ${a.late} · ขาด ${a.absent} · หนี ${a.skip} · ลา ${a.leave} · รวม ${a.tot} ครั้ง</div></div><div style="text-align:right"><b style="color:${a.attendPct>=80?'var(--green)':a.attendPct>=60?'var(--orange)':'var(--red)'}">${a.attendPct}%</b><div class="meta">เวลาเรียน</div></div></div>`).join('')}</div>`;
   }
   if(repWorkView==='history')return workHistoryHTML(subs,studs);
   const subList=repSubj==='all'?subs.map(s=>s.id):[repSubj];const asgs=DB.assignments.filter(a=>subList.includes(a.subjectId));const subOf=stu=>asgs.filter(a=>a.scores?.[stu.id]?.submittedAt).length;const totalA=asgs.length;
@@ -1491,9 +1505,9 @@ function buildReportPrintHTML(cls,subs,studs){
       const summary=`<p style="margin:8px 0 0;font-size:12px">สรุป: มา ${cnt.present} · สาย ${cnt.late} · ขาด ${cnt.absent} · หนี ${cnt.skip} · ลา ${cnt.leave} · ยังไม่เช็ก ${cnt.none} · รวม ${studs.length} คน</p>`;
       return reportPrintShell(`รายงานการมาเรียน · ${esc(cls.name)}`,`${subName} · ${rng.label}`,headCols,bodyRows,summary,teacherName,meName,printedAt);
     }
-    const headCols=`<th style="width:11mm;text-align:center">เลขที่</th><th>ชื่อ - นามสกุล</th><th style="width:13mm;text-align:center">มา</th><th style="width:13mm;text-align:center">สาย</th><th style="width:13mm;text-align:center">ขาด</th><th style="width:13mm;text-align:center">หนี</th><th style="width:13mm;text-align:center">ลา</th><th style="width:16mm;text-align:center">อัตรา</th>`;
+    const headCols=`<th style="width:11mm;text-align:center">เลขที่</th><th>ชื่อ - นามสกุล</th><th style="width:12mm;text-align:center">มา</th><th style="width:12mm;text-align:center">สาย</th><th style="width:12mm;text-align:center">ขาด</th><th style="width:12mm;text-align:center">หนี</th><th style="width:12mm;text-align:center">ลา</th><th style="width:16mm;text-align:center">ร้อยละของ<br>เวลาเรียน</th>`;
     const t={present:0,late:0,absent:0,skip:0,leave:0};
-    const bodyRows=studs.map(s=>{const a=attAgg(s,subList,rng.start,rng.end);['present','late','absent','skip','leave'].forEach(k=>t[k]+=a[k]);return`<tr><td style="text-align:center">${esc(s.number)}</td><td>${esc(s.name)}</td><td style="text-align:center">${a.present}</td><td style="text-align:center">${a.late}</td><td style="text-align:center">${a.absent}</td><td style="text-align:center">${a.skip}</td><td style="text-align:center">${a.leave}</td><td style="text-align:center">${a.rate}%</td></tr>`;}).join('');
+    const bodyRows=studs.map(s=>{const a=attAgg(s,subList,rng.start,rng.end);['present','late','absent','skip','leave'].forEach(k=>t[k]+=a[k]);return`<tr><td style="text-align:center">${esc(s.number)}</td><td>${esc(s.name)}</td><td style="text-align:center">${a.present}</td><td style="text-align:center">${a.late}</td><td style="text-align:center">${a.absent}</td><td style="text-align:center">${a.skip}</td><td style="text-align:center">${a.leave}</td><td style="text-align:center;font-weight:600">${a.attendPct}%</td></tr>`;}).join('');
     const summary=`<p style="margin:8px 0 0;font-size:12px">รวมทั้งห้อง: มา ${t.present} · สาย ${t.late} · ขาด ${t.absent} · หนี ${t.skip} · ลา ${t.leave}</p>`;
     return reportPrintShell(`รายงานการมาเรียน (สรุป) · ${esc(cls.name)}`,`${subName} · ${rng.label} (${rng.start} ถึง ${rng.end})`,headCols,bodyRows,summary,teacherName,meName,printedAt);
   }
