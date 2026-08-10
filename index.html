@@ -596,22 +596,32 @@ function renderBrand(){const bn=document.getElementById('brandName');if(bn)bn.te
   const lg=document.getElementById('brandLogo');if(lg)lg.innerHTML=DB.logo?`<img src="${esc(DB.logo)}" onerror="this.parentNode.textContent='🎒'">`:'🎒';}
 function setTopActions(h){document.getElementById('topActions').innerHTML=h;}
 
+  
 /* ---------- GRADE / ATTENDANCE STATS ---------- */
-function gradeOf(stu){const w=DB.weights;const subs=subjectsOf(stu.classroomId).map(s=>s.id);const asgs=DB.assignments.filter(a=>subs.includes(a.subjectId));
-  let dG=0,dF=0,fG=0,fF=0;asgs.forEach(a=>{const sc=a.scores?.[stu.id];if(sc&&sc.value!=null){if(a.type==='final'){fG+=+sc.value;fF+=+(a.fullScore||1);}else{dG+=+sc.value;dF+=+(a.fullScore||1);}}});
-  const dp=dF?dG/dF:0,fp=fF?fG/fF:0;const total=Math.round(dp*w.during+fp*w.final);
-  const grade=total>=80?4:total>=75?3.5:total>=70?3:total>=65?2.5:total>=60?2:total>=55?1.5:total>=50?1:0;return{total,grade};}
-function attStats(stu){let p=0,l=0,a=0,k=0,lv=0,tot=0;Object.values(stu.attendance||{}).forEach(v=>{tot++;if(v==='present')p++;else if(v==='late')l++;else if(v==='absent')a++;else if(v==='skip')k++;else if(v==='leave')lv++;});const rate=tot?Math.round((p+l*.5)/tot*100):0;return{p,l,a,k,lv,tot,rate};}
-
-function attStatsFor(stu,subjId){
-  let p=0,l=0,a=0,k=0,lv=0,tot=0;
-  Object.entries(stu.attendance||{}).forEach(([key,v])=>{
-    if(subjId!=='all'&&!key.startsWith(subjId+'|'))return;
-    tot++;
-    if(v==='present')p++;else if(v==='late')l++;else if(v==='absent')a++;else if(v==='skip')k++;else if(v==='leave')lv++;
-  });
-  const rate=tot?Math.round((p+l*.5)/tot*100):0;
-  return{p,l,a,k,lv,tot,rate};
+function gradeCaps(){const w=DB.weights||{during:70,final:30};return{during:+w.during||0,final:+w.final||0};}
+function letterGrade(total){return total>=80?4:total>=75?3.5:total>=70?3:total>=65?2.5:total>=60?2:total>=55?1.5:total>=50?1:0;}
+// ผลการเรียนของนักเรียน 1 คน ใน 1 รายวิชา — งานที่ยังไม่ให้คะแนน = 0, หารไม่ให้เกินคะแนนเก็บ/ปลายภาค
+function subjectResult(stu,subjId){
+  const caps=gradeCaps();const as=subjAssign(subjId);
+  let dG=0,dF=0,fG=0,fF=0;
+  as.forEach(a=>{const full=+(a.fullScore||0);const sc=a.scores?.[stu.id];const v=(sc&&sc.value!=null)?+sc.value:0;
+    if(a.type==='final'){fF+=full;fG+=v;}else{dF+=full;dG+=v;}});
+  const duringScaled=dF?(dG/dF)*caps.during:0;
+  const finalScaled=fF?(fG/fF)*caps.final:0;
+  const total=Math.round(duringScaled+finalScaled);
+  return{dG,dF,fG,fF,duringScaled,finalScaled,total,grade:letterGrade(total),
+    duringCap:caps.during,finalCap:caps.final,hasDuring:dF>0,hasFinal:fF>0};
+}
+// คะแนนรวมทุกวิชา (ใช้จัดอันดับ/สถิติ) — งานที่ยังไม่ให้คะแนนนับเป็น 0
+function gradeOf(stu){
+  const caps=gradeCaps();const subs=subjectsOf(stu.classroomId).map(s=>s.id);
+  const asgs=DB.assignments.filter(a=>subs.includes(a.subjectId));
+  let dG=0,dF=0,fG=0,fF=0;
+  asgs.forEach(a=>{const full=+(a.fullScore||0);const sc=a.scores?.[stu.id];const v=(sc&&sc.value!=null)?+sc.value:0;
+    if(a.type==='final'){fF+=full;fG+=v;}else{dF+=full;dG+=v;}});
+  const dp=dF?dG/dF:0,fp=fF?fG/fF:0;
+  const total=Math.round(dp*caps.during+fp*caps.final);
+  return{total,grade:letterGrade(total)};
 }
   
 /* ============================================================
@@ -1109,10 +1119,60 @@ async function delAssign(id){
   DB.assignments=DB.assignments.filter(x=>x.id!==id);
   closeModal();render();banner('ลบแล้ว');
 }
-function gradeModal(id){const a=DB.assignments.find(x=>x.id===id);const sub=subjById(a.subjectId);const classes=(sub.classroomIds||[]).map(clsById).filter(Boolean);
-  openModal(`<h2>ให้คะแนน: ${esc(a.name)}</h2><p class="meta" style="margin-bottom:12px">เต็ม ${a.fullScore} · ${esc(sub.name)}</p>
-    ${classes.map(c=>`<div style="margin:6px 0 4px;font-weight:600;color:var(--purple)">🏫 ${esc(c.name)}</div>`+studentsOf(c.id).map(st=>{const sc=a.scores?.[st.id]||{};return`<div style="margin-bottom:12px;border-bottom:1px solid var(--sep);padding-bottom:10px"><div class="row" style="align-items:center"><div style="width:28px">${avatarSVG(st.avatar,28)}</div><div style="flex:1;font-size:14px">${st.number}. ${esc(st.name)} ${sc.submittedAt?`<span class="pill student">ส่งแล้ว</span>`:''}</div><input type="number" max="${a.fullScore}" value="${sc.value??''}" placeholder="-" style="width:62px;margin:0" onchange="setScore('${id}','${st.id}',this.value)"></div><input placeholder="หมายเหตุ..." value="${esc(sc.note||'')}" style="margin:8px 0 0;font-size:13px" onchange="setNote('${id}','${st.id}',this.value)"></div>`;}).join('')).join('')}
-    <button class="btn" style="margin-top:8px" onclick="closeModal()">เสร็จสิ้น</button>`);}
+let gradeSel=new Set();
+function gradeModal(id){
+  const a=DB.assignments.find(x=>x.id===id);const sub=subjById(a.subjectId);
+  const classes=(sub.classroomIds||[]).map(clsById).filter(Boolean);
+  gradeSel.clear();
+  const rows=classes.map(c=>`<div style="margin:6px 0 4px;font-weight:600;color:var(--purple)">🏫 ${esc(c.name)}</div>`+
+    studentsOf(c.id).map(st=>{const sc=a.scores?.[st.id]||{};
+      return`<div class="reprow" data-gr="${st.id}" style="align-items:flex-start;gap:8px">
+        <div class="grpick" onclick="toggleGradePick('${id}','${st.id}')" style="width:24px;height:24px;border-radius:7px;flex:0 0 auto;margin-top:6px;border:2px solid var(--sep);background:#fff;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;cursor:pointer"></div>
+        <div style="width:28px;margin-top:2px">${avatarSVG(st.avatar,28)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px">${st.number}. ${esc(st.name)} ${sc.submittedAt?'<span class="pill student">ส่งแล้ว</span>':''}</div>
+          <input placeholder="หมายเหตุ..." value="${esc(sc.note||'')}" style="margin:6px 0 0;font-size:13px" onchange="setNote('${id}','${st.id}',this.value)">
+        </div>
+        <input type="number" max="${a.fullScore}" value="${sc.value??''}" placeholder="-" style="width:62px;margin:0;margin-top:2px" onchange="setScore('${id}','${st.id}',this.value)">
+      </div>`;}).join('')).join('');
+  openModal(`<h2>ให้คะแนน: ${esc(a.name)}</h2>
+    <p class="meta" style="margin-bottom:10px">เต็ม ${a.fullScore} · ${esc(sub.name)}</p>
+    <div class="listcard" style="box-shadow:none;border:1px solid var(--sep);padding:12px;margin-bottom:14px">
+      <div style="font-weight:600;margin-bottom:6px">⚡ กรอกคะแนนพร้อมกันหลายคน</div>
+      <div class="row"><input id="bulkScore" type="number" max="${a.fullScore}" placeholder="คะแนน (เต็ม ${a.fullScore})" style="flex:1;margin:0">
+        <button class="btn sm green" onclick="applyBulkGrade('${id}','sel')">ใส่ให้ที่เลือก</button>
+        <button class="btn sm" onclick="applyBulkGrade('${id}','all')">ใส่ทั้งห้อง</button></div>
+      <div class="row" style="margin-top:8px"><button class="btn sm gray" onclick="gradeSelectAll('${id}')">เลือกทั้งหมด</button>
+        <button class="btn sm gray" onclick="gradeSelectClear('${id}')">ล้างที่เลือก</button>
+        <span class="meta" id="gradeSelCount">เลือก 0 คน</span></div>
+    </div>
+    <div id="gradeRows">${rows}</div>
+    <button class="btn" style="margin-top:8px" onclick="closeModal()">เสร็จสิ้น</button>`);
+  updateGradeSelCount();
+}
+function paintGradePick(sid){const box=document.querySelector(`.reprow[data-gr="${sid}"] .grpick`);if(!box)return;const on=gradeSel.has(sid);box.style.border='2px solid '+(on?'var(--blue)':'var(--sep)');box.style.background=on?'var(--blue)':'#fff';box.textContent=on?'✓':'';}
+function toggleGradePick(aid,sid){if(gradeSel.has(sid))gradeSel.delete(sid);else gradeSel.add(sid);paintGradePick(sid);updateGradeSelCount();}
+function allGradeIds(aid){const a=DB.assignments.find(x=>x.id===aid);const sub=subjById(a.subjectId);const ids=[];(sub.classroomIds||[]).map(clsById).filter(Boolean).forEach(c=>studentsOf(c.id).forEach(s=>ids.push(s.id)));return ids;}
+function gradeSelectAll(aid){allGradeIds(aid).forEach(id=>gradeSel.add(id));allGradeIds(aid).forEach(paintGradePick);updateGradeSelCount();}
+function gradeSelectClear(aid){const ids=[...gradeSel];gradeSel.clear();ids.forEach(paintGradePick);updateGradeSelCount();}
+function updateGradeSelCount(){const el=document.getElementById('gradeSelCount');if(el)el.textContent='เลือก '+gradeSel.size+' คน';}
+async function applyBulkGrade(aid,scope){
+  const a=DB.assignments.find(x=>x.id===aid);if(!a)return;
+  const raw=document.getElementById('bulkScore')?.value;
+  if(raw===''||raw==null)return banner('กรอกคะแนนก่อน',true);
+  const v=+raw;if(isNaN(v))return banner('คะแนนไม่ถูกต้อง',true);
+  if(v>a.fullScore&&!confirm(`คะแนน ${v} เกินคะแนนเต็ม (${a.fullScore}) ต้องการใส่ต่อหรือไม่?`))return;
+  const ids=scope==='all'?allGradeIds(aid):[...gradeSel];
+  if(!ids.length)return banner(scope==='all'?'ห้องนี้ยังไม่มีนักเรียน':'ยังไม่ได้เลือกนักเรียน',true);
+  if(!confirm(`ใส่คะแนน ${v} ให้นักเรียน ${ids.length} คน?`))return;
+  a.scores=a.scores||{};
+  const rows=ids.map(sid=>{a.scores[sid]=a.scores[sid]||{};a.scores[sid].value=v;const c=a.scores[sid];
+    return{assignment_id:aid,student_id:sid,value:v,note:c.note||null,submitted_at:c.submittedAt||null};});
+  const {error}=await sb.from('scores').upsert(rows,{onConflict:'assignment_id,student_id'});
+  if(error)return banner('บันทึกไม่สำเร็จ: '+error.message,true);
+  logAction({type:'work',detail:`ให้คะแนน ${v} · ${a.name} · ${ids.length} คน`});
+  soundOK();gradeModal(aid);banner(`ใส่คะแนน ${v} ให้ ${ids.length} คนแล้ว`);
+}
 async function saveScoreRow(aid,sid){
   const a=DB.assignments.find(x=>x.id===aid);const c=a.scores[sid]||{};
   const {error}=await sb.from('scores').upsert(
@@ -1419,12 +1479,15 @@ function renderReport(){setTopActions('');const el=document.getElementById('page
       <div class="row" style="margin-bottom:8px"><button class="btn sm ${repMode==='att'?'':'gray'}" onclick="repMode='att';repChange()">การมาเรียน</button><button class="btn sm ${repMode==='work'?'':'gray'}" onclick="repMode='work';repChange()">การส่งงาน</button></div>
       <label class="fl">ชั้นเรียน</label><select style="margin-bottom:8px" onchange="repCls=this.value;repSubj='all';repChange()">${mine.map(c=>`<option value="${c.id}" ${c.id===repCls?'selected':''}>${esc(c.name)} (${esc(c.year)})</option>`).join('')}</select>
       <label class="fl">รายวิชา</label><select style="margin-bottom:8px" onchange="repSubj=this.value;repChange()"><option value="all" ${repSubj==='all'?'selected':''}>ทุกวิชา</option>${subs.map(s=>`<option value="${s.id}" ${s.id===repSubj?'selected':''}>${esc(s.code||'')} ${esc(s.name)}</option>`).join('')}</select>
-      ${repMode==='att'
+            ${repMode==='att'
         ?`<label class="fl">ช่วงเวลา</label><div class="row" style="margin-bottom:8px">${periodBtns.map(([k,lb])=>`<button class="btn sm ${repPeriod===k?'':'gray'}" onclick="repPeriod='${k}';repChange()">${lb}</button>`).join('')}</div>${periodField}`
-        :`<label class="fl">มุมมอง</label><div class="row" style="margin-bottom:8px"><button class="btn sm ${repWorkView==='summary'?'':'gray'}" onclick="repWorkView='summary';repChange()">สรุปรวม</button><button class="btn sm ${repWorkView==='history'?'':'gray'}" onclick="repWorkView='history';repChange()">ประวัติการส่ง</button></div>`}
+        :repMode==='work'
+        ?`<label class="fl">มุมมอง</label><div class="row" style="margin-bottom:8px"><button class="btn sm ${repWorkView==='summary'?'':'gray'}" onclick="repWorkView='summary';repChange()">สรุปรวม</button><button class="btn sm ${repWorkView==='history'?'':'gray'}" onclick="repWorkView='history';repChange()">ประวัติการส่ง</button></div>`
+        :`<p class="meta" style="margin:2px 0 6px">แสดงคะแนนเก็บ/ปลายภาค รวม และเกรด · น้ำหนัก ${gradeCaps().during}/${gradeCaps().final} (แก้ที่หน้าตั้งค่า) · เลือกรายวิชาเดียวหรือทุกวิชาได้</p>`}
       <div class="row" style="margin-top:6px"><button class="btn" onclick="showReport()">📊 แสดงผล</button><button class="btn purple" onclick="printReport()">🖨 ส่งออก PDF</button></div></div>
     ${repShown?`<div>${buildReportHTML(cls,subs,studs)}</div>`:`<div class="empty"><div class="big">📊</div>เลือกตัวกรอง แล้วกด "แสดงผล"</div>`}`;}
 function buildReportHTML(cls,subs,studs){
+  if(repMode==='grade')return gradeReportHTML(cls,subs,studs);
   if(repMode==='att'){
     const subList=repSubj==='all'?subs.map(s=>s.id):[repSubj];
     const rng=reportRange();
@@ -1493,6 +1556,7 @@ function buildReportPrintHTML(cls,subs,studs){
   const printedAt=thDateTime(new Date().toISOString());
   const teacherName=userById(cls.ownerId)?.name||'.......................................';
   const meName=session?.name||'';
+  if(repMode==='grade')return gradeReportPrintHTML(cls,subs,studs);
   if(repMode==='att'){
     const subList=repSubj==='all'?subs.map(s=>s.id):[repSubj];
     const subName=repSubj==='all'?'ทุกวิชา':esc(subs.find(s=>s.id===repSubj)?.name||'');
@@ -1528,6 +1592,72 @@ function buildReportPrintHTML(cls,subs,studs){
   return reportPrintShell(`รายงานการส่งงาน · ${esc(cls.name)}`,`${subName} · ${totalA} ชิ้นงาน`,headCols,bodyRows,'',teacherName,meName,printedAt);
 }
 
+/* ---------- GRADE REPORT (ผลการเรียน) ---------- */
+function gradeReportHTML(cls,subs,studs){
+  const list=repSubj==='all'?subs:subs.filter(s=>s.id===repSubj);
+  const caps=gradeCaps();
+  if(!list.length)return`<div class="listcard"><p class="meta">ยังไม่มีรายวิชา</p></div>`;
+  let html=`<div class="listcard"><h3>🎓 รายงานผลการเรียน</h3>
+    <div class="meta">${esc(cls.name)} · คะแนนเก็บ ${caps.during} / ปลายภาค ${caps.final} · งานที่ยังไม่ให้คะแนนคิดเป็น 0</div></div>`;
+  list.forEach(s=>{
+    const rows=studs.map(st=>({st,r:subjectResult(st,s.id)}));
+    const dist={};[4,3.5,3,2.5,2,1.5,1,0].forEach(g=>dist[g]=0);rows.forEach(x=>dist[x.r.grade]++);
+    html+=`<div class="listcard"><div class="row"><h3>📚 ${esc(s.name)}</h3><div class="spacer"></div><span class="pill">${esc(s.code||'')}</span></div>
+      <div class="meta" style="margin-bottom:8px">${termLabel(s)}</div>
+      ${rows.map(({st,r})=>`<div class="reprow"><div style="width:28px">${avatarSVG(st.avatar,28)}</div>
+        <div style="flex:1;min-width:0"><div style="font-size:14px">${st.number}. ${esc(st.name)}</div>
+        <div class="meta">เก็บ ${r.duringScaled.toFixed(1)}/${r.duringCap} · ปลายภาค ${r.finalScaled.toFixed(1)}/${r.finalCap}</div></div>
+        <div style="text-align:right"><b style="font-size:16px;color:${r.total>=50?'var(--green)':'var(--red)'}">${r.total}</b><div class="meta">เกรด ${r.grade}</div></div></div>`).join('')||'<p class="meta">ไม่มีนักเรียน</p>'}
+      <div class="row" style="margin-top:8px">${[4,3.5,3,2.5,2,1.5,1,0].map(g=>dist[g]?`<span class="pill">เกรด ${g}: ${dist[g]}</span>`:'').join('')}</div></div>`;
+  });
+  if(repSubj==='all'&&subs.length>1){
+    const rows=studs.map(st=>{const per=subs.map(s=>subjectResult(st,s.id).total);const avg=per.length?Math.round(per.reduce((a,b)=>a+b,0)/per.length):0;return{st,avg,grade:letterGrade(avg)};}).sort((a,b)=>b.avg-a.avg);
+    html+=`<div class="listcard"><h3>🏅 สรุปเฉลี่ยทุกวิชา</h3>${rows.map(({st,avg,grade})=>`<div class="reprow"><div style="width:28px">${avatarSVG(st.avatar,28)}</div><div style="flex:1">${st.number}. ${esc(st.name)}</div><div style="text-align:right"><b>${avg}</b><div class="meta">เกรดเฉลี่ย ${grade}</div></div></div>`).join('')}</div>`;
+  }
+  return html;
+}
+function gradeReportPrintHTML(cls,subs,studs){
+  const printedAt=thDateTime(new Date().toISOString());
+  const teacherName=userById(cls.ownerId)?.name||'.......................................';
+  const meName=session?.name||'';
+  const caps=gradeCaps();
+  const list=repSubj==='all'?subs:subs.filter(s=>s.id===repSubj);
+  const logo=DB.logo?`<img src="${esc(DB.logo)}" style="width:15mm;height:15mm;border-radius:3mm;object-fit:cover">`:'';
+  const header=`<div style="text-align:center;margin-bottom:6px">
+    ${logo?`<div style="margin-bottom:2mm">${logo}</div>`:''}
+    <div style="font-size:17px;font-weight:700">${esc(DB.systemName)}</div>
+    <div style="font-size:13px">${esc(DB.school||'')}</div>
+    <div style="font-size:15px;font-weight:600;margin-top:3px">รายงานผลการเรียน · ${esc(cls.name)}</div>
+    <div style="font-size:12px;color:#333">คะแนนเก็บ ${caps.during} / ปลายภาค ${caps.final} · งานที่ยังไม่ให้คะแนนคิดเป็น 0</div></div>`;
+  let tables='';
+  list.forEach(s=>{
+    const rows=studs.map(st=>{const r=subjectResult(st,s.id);
+      return`<tr><td style="text-align:center">${esc(st.number)}</td><td>${esc(st.name)}</td>
+        <td style="text-align:center">${r.duringScaled.toFixed(1)}</td>
+        <td style="text-align:center">${r.finalScaled.toFixed(1)}</td>
+        <td style="text-align:center;font-weight:600">${r.total}</td>
+        <td style="text-align:center;font-weight:600">${r.grade}</td></tr>`;}).join('');
+    tables+=`<div style="font-weight:700;margin:8px 0 4px">📚 ${esc(s.code||'')} ${esc(s.name)} — ${termLabel(s)}</div>
+      <table class="rpt-table" style="margin-bottom:10px"><thead><tr>
+        <th style="width:12mm;text-align:center">เลขที่</th><th>ชื่อ - นามสกุล</th>
+        <th style="width:22mm;text-align:center">คะแนนเก็บ<br>(${caps.during})</th>
+        <th style="width:22mm;text-align:center">ปลายภาค<br>(${caps.final})</th>
+        <th style="width:16mm;text-align:center">รวม</th><th style="width:14mm;text-align:center">เกรด</th>
+      </tr></thead><tbody>${rows}</tbody></table>`;
+  });
+  if(repSubj==='all'&&subs.length>1){
+    const rows=studs.map(st=>{const per=subs.map(s=>subjectResult(st,s.id).total);const avg=per.length?Math.round(per.reduce((a,b)=>a+b,0)/per.length):0;
+      return`<tr><td style="text-align:center">${esc(st.number)}</td><td>${esc(st.name)}</td><td style="text-align:center;font-weight:600">${avg}</td><td style="text-align:center;font-weight:600">${letterGrade(avg)}</td></tr>`;}).join('');
+    tables+=`<div style="font-weight:700;margin:8px 0 4px">🏅 สรุปเฉลี่ยทุกวิชา</div>
+      <table class="rpt-table" style="margin-bottom:10px"><thead><tr><th style="width:12mm;text-align:center">เลขที่</th><th>ชื่อ - นามสกุล</th><th style="width:20mm;text-align:center">เฉลี่ย</th><th style="width:18mm;text-align:center">เกรดเฉลี่ย</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+  const sign=`<div class="rpt-sign"><div style="display:flex;justify-content:space-between;gap:18mm;margin-top:16mm">
+      <div style="text-align:center;flex:1"><div>ลงชื่อ ..............................................</div><div style="margin-top:5px">( ${esc(meName||'.......................................')} )</div><div style="margin-top:2px">ผู้พิมพ์</div></div>
+      <div style="text-align:center;flex:1"><div>ลงชื่อ ..............................................</div><div style="margin-top:5px">( ${esc(teacherName)} )</div><div style="margin-top:2px">ครูประจำชั้น</div></div>
+    </div><div style="text-align:right;font-size:11px;color:#555;margin-top:12mm">พิมพ์เมื่อ ${printedAt}</div></div>`;
+  return header+tables+sign;
+}
+
 /* ============================================================
    STATS
    ============================================================ */
@@ -1541,7 +1671,10 @@ function renderStats(){setTopActions('');const el=document.getElementById('page-
   const buckets={4:0,3.5:0,3:0,2.5:0,2:0,1.5:0,1:0,0:0};const order=[4,3.5,3,2.5,2,1.5,1,0];grades.forEach(g=>buckets[g.grade]++);const max=Math.max(...Object.values(buckets),1);const subs=clsSubjects();
   el.innerHTML=clsSel+`<div class="statgrid"><div class="stat s1"><div class="v">${avg}</div><div class="k">คะแนนเฉลี่ยห้อง</div></div><div class="stat s2"><div class="v">${subs.length}</div><div class="k">รายวิชา</div></div><div class="stat s3"><div class="v">${studs.length}</div><div class="k">นักเรียน</div></div></div>
     <div class="listcard"><h3>🎓 การกระจายเกรด</h3><div class="bar-wrap">${order.map(g=>`<div class="bar" style="height:${buckets[g]/max*100}%"><span>${buckets[g]}</span><small>${g}</small></div>`).join('')}</div></div>
-    ${subs.map(s=>{const as=subjAssign(s.id);const during=as.filter(a=>a.type!=='final'),final=as.filter(a=>a.type==='final');const pct=arr=>{let g=0,f=0;arr.forEach(a=>Object.values(a.scores||{}).forEach(sc=>{if(sc.value!=null){g+=sc.value;f+=a.fullScore;}}));return f?Math.round(g/f*100):0;};const dp=pct(during),fp=pct(final);
+    ${subs.map(s=>{const as=subjAssign(s.id);const during=as.filter(a=>a.type!=='final'),final=as.filter(a=>a.type==='final');
+      const nStu=studs.length;
+      const pct=arr=>{let g=0,f=0;arr.forEach(a=>{const full=+(a.fullScore||0);studs.forEach(st=>{const sc=a.scores?.[st.id];g+=(sc&&sc.value!=null)?+sc.value:0;});f+=full*nStu;});return f?Math.round(g/f*100):0;};
+      const dp=pct(during),fp=pct(final);
       return`<div class="listcard"><div class="row"><h3>📚 ${esc(s.name)}</h3><div class="spacer"></div><span class="pill">${esc(s.code||'')}</span></div><div class="meta">${termLabel(s)}</div>
         <div style="margin:10px 0 4px"><div class="row"><span style="font-size:13px">ระหว่างเรียน (${during.length})</span><div class="spacer"></div><b>${dp}%</b></div><div style="background:var(--sep);border-radius:8px;height:9px;margin-top:5px"><div style="width:${dp}%;height:100%;background:var(--gBlue);border-radius:8px"></div></div></div>
         <div style="margin:10px 0 4px"><div class="row"><span style="font-size:13px">ปลายภาค (${final.length})</span><div class="spacer"></div><b>${fp}%</b></div><div style="background:var(--sep);border-radius:8px;height:9px;margin-top:5px"><div style="width:${fp}%;height:100%;background:var(--gRed);border-radius:8px"></div></div></div></div>`;}).join('')||'<p class="meta" style="text-align:center">ยังไม่มีรายวิชา</p>'}`;}
@@ -1595,8 +1728,8 @@ function renderPortal(){const el=document.getElementById('page-portal');
   const rkScore=classStuds.map(s=>({id:s.id,v:gradeOf(s).total})).sort((a,b)=>b.v-a.v).findIndex(x=>x.id===stu.id)+1;
   const rkAtt=classStuds.map(s=>({id:s.id,v:attStats(s).rate})).sort((a,b)=>b.v-a.v).findIndex(x=>x.id===stu.id)+1;
   const subs=subjectsOf(stu.classroomId);
-  const subjRows=subs.map(s=>{const as=subjAssign(s.id);let got=0,full=0,submitted=0;as.forEach(a=>{const sc=a.scores?.[stu.id];if(sc?.submittedAt)submitted++;if(sc&&sc.value!=null){got+=+sc.value;full+=+a.fullScore;}});const pct=full?Math.round(got/full*100):0;
-    return`<div style="margin:10px 0"><div class="row"><span style="font-size:14px;font-weight:500">📚 ${esc(s.name)}</span><div class="spacer"></div><b>${got}/${full||0}</b></div><div class="meta">ส่งงาน ${submitted}/${as.length} ชิ้น</div><div style="background:var(--sep);border-radius:8px;height:9px;margin-top:5px"><div style="width:${pct}%;height:100%;background:var(--gBlue);border-radius:8px"></div></div></div>`;}).join('')||'<p class="meta">ยังไม่มีรายวิชา</p>';
+    const subjRows=subs.map(s=>{const as=subjAssign(s.id);const r=subjectResult(stu,s.id);const submitted=as.filter(a=>a.scores?.[stu.id]?.submittedAt).length;
+    return`<div style="margin:10px 0"><div class="row"><span style="font-size:14px;font-weight:500">📚 ${esc(s.name)}</span><div class="spacer"></div><b>${r.total}/100 · เกรด ${r.grade}</b></div><div class="meta">คะแนนเก็บ ${r.duringScaled.toFixed(1)}/${r.duringCap} · ปลายภาค ${r.finalScaled.toFixed(1)}/${r.finalCap} · ส่งงาน ${submitted}/${as.length} ชิ้น</div><div style="background:var(--sep);border-radius:8px;height:9px;margin-top:5px"><div style="width:${r.total}%;height:100%;background:var(--gBlue);border-radius:8px"></div></div></div>`;}).join('')||'<p class="meta">ยังไม่มีรายวิชา</p>';
   if(portalAttSubj!=='all'&&!subs.find(s=>s.id===portalAttSubj))portalAttSubj='all';
   const at2=attStatsFor(stu,portalAttSubj);
   const attSelHTML=`<select style="margin-bottom:10px" onchange="portalAttSubj=this.value;renderPortal()">
