@@ -1483,12 +1483,32 @@ function attStatsFor(stu, subjId){
   const subs = subjId==='all' ? subjectsOf(stu.classroomId).map(s=>s.id) : [subjId];
   const c={present:0,late:0,absent:0,skip:0,leave:0};
   let tot=0;
+  
+  // เพิ่ม debug
+  console.log('🔍 attStatsFor:', {
+    student: stu.name,
+    subjId,
+    targetSubs: subs,
+    allAttKeys: Object.keys(stu.attendance||{})
+  });
+  
   Object.entries(stu.attendance||{}).forEach(([k,v])=>{
     const i=k.indexOf('|');
     const sid=k.slice(0,i);
-    if(!subs.includes(sid))return;
+    const date=k.slice(i+1);
+    
+    // เพิ่ม debug แต่ละ record
+    if(!subs.includes(sid)){
+      console.log('  ❌ skip:', k, '→ sid:', sid, 'not in', subs);
+      return;
+    }
+    console.log('  ✅ count:', k, '→', v);
+    
     if(c[v]!=null){c[v]++;tot++;}
   });
+  
+  console.log('  📊 result:', c, 'total:', tot);
+  
   const rate=tot?Math.round((c.present+c.late*.5)/tot*100):0;
   const attendPct=tot?Math.round((c.present+c.late+c.leave)/tot*100):0;
   return{p:c.present,l:c.late,a:c.absent,k:c.skip,lv:c.leave,tot,rate,attendPct,...c};
@@ -1787,8 +1807,17 @@ function renderPortal(){const el=document.getElementById('page-portal');
     ${subs.map(s=>`<option value="${s.id}" ${s.id===portalAttSubj?'selected':''}>${esc(s.code||'')} ${esc(s.name)}</option>`).join('')}
   </select>`;
   const attScope=portalAttSubj==='all'?'รวมทุกวิชา':'เฉพาะวิชา '+esc(subs.find(s=>s.id===portalAttSubj)?.name||'');                        
-  el.innerHTML=`<div class="listcard" style="text-align:center"><div style="margin-bottom:6px">${avatarSVG(stu.avatar,96)}</div><h3 style="justify-content:center;font-size:19px">${esc(stu.name)}</h3><div class="meta">เลขที่ ${stu.number} · ${esc(cls?.name||'')} · รหัส ${esc(stu.code||'-')}</div></div>
-    <div class="statgrid"><div class="stat s1"><div class="v">${g.total}</div><div class="k">คะแนนรวม</div></div><div class="stat s2"><div class="v">${g.grade}</div><div class="k">เกรดประเมิน</div></div><div class="stat s3"><div class="v">${at.rate}%</div><div class="k">เข้าเรียน</div></div><div class="stat s4"><div class="v">${stu.points||0}</div><div class="k">แต้มสะสม</div></div></div>
+  el.innerHTML=`<div class="listcard" style="text-align:center">
+    <div style="margin-bottom:6px">${avatarSVG(stu.avatar,96)}</div>
+    <h3 style="justify-content:center;font-size:19px">${esc(stu.name)}</h3>
+    <div class="meta">เลขที่ ${stu.number} · ${esc(cls?.name||'')} · รหัส ${esc(stu.code||'-')}</div>
+    </div>
+    <div class="statgrid">
+      <div class="stat s1"><div class="v">${g.total}</div><div class="k">คะแนนรวมทุกวิชา</div></div>
+      <div class="stat s2"><div class="v">${g.grade}</div><div class="k">เกรดเฉลี่ย</div></div>
+      <div class="stat s3"><div class="v">${at.rate}%</div><div class="k">เข้าเรียนรวม</div></div>
+      <div class="stat s4"><div class="v">${stu.points||0}</div><div class="k">แต้มสะสม</div></div>
+    </div>
     <div class="listcard"><h3>🏆 อันดับในห้อง (${classStuds.length} คน)</h3><div class="row" style="margin-top:6px"><div style="flex:1;text-align:center;background:#f6f4ff;border-radius:14px;padding:12px"><div style="font-size:24px;font-weight:700;color:var(--purple)">#${rkScore}</div><div class="meta">ด้านคะแนน</div></div><div style="flex:1;text-align:center;background:#f0fbf4;border-radius:14px;padding:12px"><div style="font-size:24px;font-weight:700;color:var(--green)">#${rkAtt}</div><div class="meta">ด้านเข้าเรียน</div></div></div></div>
     <div class="listcard"><h3>📅 สรุปการเข้าเรียน</h3>
     ${attSelHTML}
