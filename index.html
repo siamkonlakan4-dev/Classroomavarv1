@@ -1483,36 +1483,17 @@ function attStatsFor(stu, subjId){
   const subs = subjId==='all' ? subjectsOf(stu.classroomId).map(s=>s.id) : [subjId];
   const c={present:0,late:0,absent:0,skip:0,leave:0};
   let tot=0;
-  
-  // เพิ่ม debug
-  console.log('🔍 attStatsFor:', {
-    student: stu.name,
-    subjId,
-    targetSubs: subs,
-    allAttKeys: Object.keys(stu.attendance||{})
-  });
-  
   Object.entries(stu.attendance||{}).forEach(([k,v])=>{
     const i=k.indexOf('|');
     const sid=k.slice(0,i);
-    const date=k.slice(i+1);
-    
-    // เพิ่ม debug แต่ละ record
-    if(!subs.includes(sid)){
-      console.log('  ❌ skip:', k, '→ sid:', sid, 'not in', subs);
-      return;
-    }
-    console.log('  ✅ count:', k, '→', v);
-    
+    if(!subs.includes(sid))return;
     if(c[v]!=null){c[v]++;tot++;}
   });
-  
-  console.log('  📊 result:', c, 'total:', tot);
-  
   const rate=tot?Math.round((c.present+c.late*.5)/tot*100):0;
   const attendPct=tot?Math.round((c.present+c.late+c.leave)/tot*100):0;
   return{p:c.present,l:c.late,a:c.absent,k:c.skip,lv:c.leave,tot,rate,attendPct,...c};
 }
+  
 function workHistoryHTML(subs,studs){
   const subList=repSubj==='all'?subs.map(s=>s.id):[repSubj];
   const asgs=DB.assignments.filter(a=>subList.includes(a.subjectId)).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
@@ -1802,6 +1783,16 @@ function renderPortal(){const el=document.getElementById('page-portal');
     return`<div style="margin:10px 0"><div class="row"><span style="font-size:14px;font-weight:500">📚 ${esc(s.name)}</span><div class="spacer"></div><b>${r.total}/100 · เกรด ${r.grade}</b></div><div class="meta">คะแนนเก็บ ${r.duringScaled.toFixed(1)}/${r.duringCap} · ปลายภาค ${r.finalScaled.toFixed(1)}/${r.finalCap} · ส่งงาน ${submitted}/${as.length} ชิ้น</div><div style="background:var(--sep);border-radius:8px;height:9px;margin-top:5px"><div style="width:${r.total}%;height:100%;background:var(--gBlue);border-radius:8px"></div></div></div>`;}).join('')||'<p class="meta">ยังไม่มีรายวิชา</p>';
   if(portalAttSubj!=='all'&&!subs.find(s=>s.id===portalAttSubj))portalAttSubj='all';
   const at2=attStatsFor(stu,portalAttSubj);
+  const attContent = at2.tot > 0
+  ? `<div class="meta" style="margin-bottom:8px">จากทั้งหมด ${at2.tot} ครั้ง · อัตราเข้าเรียน <b>${at2.rate}%</b></div>
+     <div class="row">
+       <span class="pill" style="background:#eafbf0;color:#16a34a">มา ${at2.p}</span>
+       <span class="pill" style="background:#fff3e0;color:#e07a00">สาย ${at2.l}</span>
+       <span class="pill" style="background:#ffe9e9;color:var(--red)">ขาด ${at2.a}</span>
+       <span class="pill" style="background:#f3eafe;color:var(--purple)">หนี ${at2.k}</span>
+       <span class="pill" style="background:#e0f4ff;color:#0284c7">ลา ${at2.lv}</span>
+     </div>`
+  : `<div class="meta" style="color:var(--orange)">⚠️ ยังไม่มีการเช็กชื่อ${portalAttSubj==='all'?'':'ในวิชานี้'}</div>`;
   const attSelHTML=`<select style="margin-bottom:10px" onchange="portalAttSubj=this.value;renderPortal()">
     <option value="all" ${portalAttSubj==='all'?'selected':''}>ทุกวิชา (ภาพรวม)</option>
     ${subs.map(s=>`<option value="${s.id}" ${s.id===portalAttSubj?'selected':''}>${esc(s.code||'')} ${esc(s.name)}</option>`).join('')}
