@@ -1464,6 +1464,35 @@ function reportRange(){
   }
   return{start:`${gy}-05-01`,end:`${gy+1}-03-31`,label:`ปีการศึกษา ${be}`};
 }
+/* ---------- Helper คำนวณสรุปการมาเรียนตามช่วงวันที่ ---------- */
+function attAgg(stu, subList, startDate, endDate) {
+  const c = { present: 0, late: 0, absent: 0, skip: 0, leave: 0 };
+  let tot = 0;
+  
+  Object.entries(stu.attendance || {}).forEach(([k, v]) => {
+    const i = k.indexOf('|');
+    if (i === -1) return;
+    
+    const sid = k.slice(0, i);
+    const date = k.slice(i + 1); // ดึงวันที่ YYYY-MM-DD ออกจาก Key
+    
+    // กรองเฉพาะรายวิชาที่เลือก และวันที่ให้อยู่ในช่วง start - end
+    if (!subList.includes(sid)) return;
+    if (startDate && date < startDate) return;
+    if (endDate && date > endDate) return;
+    
+    if (c[v] != null) {
+      c[v]++;
+      tot++;
+    }
+  });
+  
+  const attendPct = tot ? Math.round((c.present + c.late + c.leave) / tot * 100) : 0;
+  const rate = tot ? Math.round((c.present + c.late * 0.5) / tot * 100) : 0;
+  
+  return { p: c.present, l: c.late, a: c.absent, k: c.skip, lv: c.leave, tot, rate, attendPct, ...c };
+}
+
 function attStats(stu){
   const subs = subjectsOf(stu.classroomId).map(s=>s.id);
   const c={present:0,late:0,absent:0,skip:0,leave:0};
