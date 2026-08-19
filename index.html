@@ -890,69 +890,30 @@ async function delUser(id){const u=userById(id);if(u.id===session.id)return bann
 async function resetStuToBirth(id){
   const s=DB.students.find(x=>x.id===id);if(!s)return;
   if(!validBirth(s.birthdate))return banner('นักเรียนยังไม่มีวันเกิด — กรอกวันเกิดก่อนรีเซ็ต',true);
-  if(!confirm(`รีเซ็ตรหัสผ่านของ "${s.name}" กลับเป็นวันเกิด (${fmtBirth(s.birthdate)})?\nนักเรียนจะถูกบังคับให้ตั้งรหัสใหม่ตอนเข้าระบบครั้งถัดไป`))return;
   
-  // ⭐ เพิ่มส่วนนี้ — รีเซ็ตรหัสผ่านจริง ๆ ใน Supabase Auth
-  if(!s.user_id){
-    banner('นักเรียนยังไม่มี user_id — ไม่สามารถรีเซ็ตได้',true);
-    return;
-  }
+  if(!confirm(`รีเซ็ตรหัสผ่านของ "${s.name}" กลับเป็นวันเกิด (${fmtBirth(s.birthdate)})?\nนักเรียนจะถูกบังคับให้ตั้งรหัสใหม่ตอนเข้าระบบครั้งถัดไป`))return;
   
   banner('กำลังรีเซ็ตรหัสผ่าน...');
   
-  // เรียก Edge Function เพื่อเปลี่ยนรหัสผ่านเป็นวันเกิด
-  const res = await sb.functions.invoke('reset-student-password', {
-    body: { user_id: s.user_id, new_password: s.birthdate }
-  });
+  // เก็บแฮชของวันเกิดเป็นรหัสชั่วคราว
+  const birthHash = await sha256(s.birthdate);
   
-  if(res.error || !res.data?.ok){
-    return banner('รีเซ็ตไม่สำเร็จ: ' + (res.data?.error || res.error?.message || ''), true);
-  }
+  const {error} = await sb.from('students').update({
+    temp_pw: birthHash,
+    must_change: true
+  }).eq('id', id);
   
-  // อัปเดตสถานะใน DB
-  const {error} = await sb.from('students').update({must_change: true}).eq('id', id);
-  if(error) return banner('อัปเดต must_change ไม่สำเร็จ: ' + error.message, true);
+  if(error) return banner('รีเซ็ตไม่สำเร็จ: ' + error.message, true);
   
-  s.pw=''; 
-  s.mustChange=true;
+  s.temp_pw = birthHash;
+  s.mustChange = true;
   logAction({type:'student',detail:'รีเซ็ตรหัสนักเรียนเป็นวันเกิด',byName:s.name});
+  save();
   
-  banner('รีเซ็ตแล้ว · ให้นักเรียนเข้าด้วยวันเกิด');
+  banner(`✅ รีเซ็ตแล้ว · รหัสชั่วคราว: ${fmtBirth(s.birthdate)}`);
   studentModal(id);
 }
 async function setStuTempPw(id){
-  const s=DB.students.find(x=>x.id===id);if(!s)return;
-  const tmp=prompt(`กำหนดรหัสชั่วคราวให้ "${s.name}" (อย่างน้อย 4 ตัวอักษร)\nนักเรียนจะถูกบังคับให้ตั้งรหัสใหม่หลังเข้าระบบ`);
-  if(tmp===null)return;
-  const t=tmp.trim();
-  if(t.length<4)return banner('รหัสชั่วคราวอย่างน้อย 4 ตัวอักษร',true);
-  
-  if(!s.user_id){
-    return banner('นักเรียนยังไม่มี user_id — ไม่สามารถตั้งรหัสได้',true);
-  }
-  
-  banner('กำลังตั้งรหัสชั่วคราว...');
-  
-  // ⭐ ใช้ Edge Function เดียวกัน
-  const res = await sb.functions.invoke('reset-student-password', {
-    body: { user_id: s.user_id, new_password: t }
-  });
-  
-  if(res.error || !res.data?.ok){
-    return banner('ตั้งรหัสไม่สำเร็จ: ' + (res.data?.error || res.error?.message || ''), true);
-  }
-  
-  // อัปเดตสถานะ
-  const {error} = await sb.from('students').update({must_change: true}).eq('id', id);
-  if(error) return banner('อัปเดต must_change ไม่สำเร็จ: ' + error.message, true);
-  
-  s.pw = await sha256(t); // เก็บแฮชไว้อ้างอิง (optional)
-  s.mustChange = true;
-  logAction({type:'student',detail:'ตั้งรหัสชั่วคราวให้นักเรียน',byName:s.name});
-  
-  banner('ตั้งรหัสชั่วคราวแล้ว: '+t);
-  studentModal(id);
-}
 function avatarStudio(){const a=window._tmpAvatar||defaultAvatar('x');
   openModal(`<h2>🎨 Avatar Studio</h2><div style="text-align:center;margin-bottom:18px">${avatarSVG(a,120)}</div>
     <label class="fl">สีตัว</label><div class="row" style="margin-bottom:14px">${PALETTE.map(c=>`<div onclick="setAv('color','${c}')" style="width:34px;height:34px;border-radius:50%;background:${c};cursor:pointer;border:3px solid ${a.color===c?'#1c1c1e':'#fff'};box-shadow:0 2px 6px rgba(0,0,0,.12)"></div>`).join('')}</div>
