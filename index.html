@@ -416,94 +416,56 @@ document.getElementById('popupBg').addEventListener('click',()=>document.getElem
 function studentSession(stu){return{id:'stu_'+stu.id,role:'student',name:stu.name,studentId:stu.id,username:stu.code};}
 function persistSession(id){try{sessionStorage.setItem('cr_uid',id);}catch(e){}}
 
+/* ---------- LOGIN ---------- */
 async function doLogin(){
-  const u=val('loginUser'),p=val('loginPass');
-  if(!u||!p)return banner('กรอกชื่อผู้ใช้และรหัสผ่าน',true);
-
-  // ตรวจสอบว่าเป็นรหัสนักเรียน (ตัวเลขล้วน)
-  if(/^\d+$/.test(u)){
-    // นักเรียน → เรียก Function ตรวจสอบ
-    const hash=await sha256(p);
-    
-    const {data,error}=await sb.rpc('student_login',{
-      stu_code:u,
-      password:hash
-    });
-    
+  const user=val('loginUser').trim();
+  const pass=val('loginPass');
+  
+  if(!user||!pass){
+    beep(300,.2,'sawtooth');
+    return banner('กรุณากรอกข้อมูลให้ครบถ้วน',true);
+  }
+  
+  banner('กำลังเข้าสู่ระบบ...');
+  
+  // ตรวจสอบว่าเป็นครู (มี @) หรือนักเรียน
+  if(user.includes('@')){
+    // ครู - ใช้ Supabase Auth
+    const {data,error}=await sb.auth.signInWithPassword({email:user,password:pass});
     if(error){
-      console.error('Login error:',error);
       beep(300,.2,'sawtooth');
-      return banner('เกิดข้อผิดพลาด กรุณาลองใหม่',true);
+      return banner('อีเมลหรือรหัสผ่านไม่ถูกต้อง',true);
     }
-    
-    if(!data.success){
-      beep(300,.2,'sawtooth');
-      if(data.error==='student_not_found'){
-        return banner('ไม่พบรหัสนักเรียนนี้',true);
-      }
-      return banner('รหัสผ่านไม่ถูกต้อง',true);
-    }
-    
-    const s=data.student;
-    
-    // เข้าระบบสำเร็จ
-    session={
-      id:'stu_'+s.id,
-      role:'student',
-      name:s.name,
-      studentId:s.id,
-      username:s.student_code
-    };
-    
-    // ถ้าใช้รหัสชั่วคราวหรือต้องเปลี่ยน → บังคับเปลี่ยน
-    if(s.used_temp || s.must_change){
-      banner('กำลังโหลดข้อมูล...');
-      await loadFromSupabase();
-      soundOK();
-      showForceChange();
-      return;
-    }
-    
-    banner('กำลังโหลดข้อมูล...');
-    await loadFromSupabase();
+    session.teacher=true;
+    session.teacherId=data.user.id;
     soundOK();
-    enterApp();
+    banner('เข้าสู่ระบบสำเร็จ');
+    return enterApp();
+  }
+  
+  // นักเรียน - ใช้ Function
+  const hash=await sha256(pass);
+  const {data,error}=await sb.rpc('student_login',{stu_id:user,pw_hash:hash});
+  
+  if(error||!data.success){
+    beep(300,.2,'sawtooth');
+    return banner(data?.msg||'รหัสนักเรียนหรือรหัสผ่านไม่ถูกต้อง',true);
+  }
+  
+  session.teacher=false;
+  session.studentId=user;
+  
+  // ✅ ตรวจสอบว่าต้องบังคับเปลี่ยนรหัสหรือไม่
+  if(data.must_change){
+    soundOK();
+    banner('กรุณาตั้งรหัสผ่านใหม่');
+    document.getElementById('forceScreen').classList.remove('hidden');
     return;
   }
-
-  // ครู/แอดมิน → ใช้ Supabase Auth
-  let email;
-  if(u.includes('@')) email=u;
-  else {
-    const {data,error}=await sb.rpc('email_for_username',{uname:u});
-    if(error||!data){
-      beep(300,.2,'sawtooth');
-      return banner('ไม่พบชื่อผู้ใช้นี้',true);
-    }
-    email=data;
-  }
-
-  const {data:auth,error}=await sb.auth.signInWithPassword({email,password:p});
-  if(error){
-    beep(300,.2,'sawtooth');
-    return banner('เข้าสู่ระบบไม่สำเร็จ ตรวจรหัสผ่าน',true);
-  }
-  await afterAuth(auth.user);
-}
-// ดึงโปรไฟล์/บทบาทจาก Supabase แล้วเข้าแอป
-async function afterAuth(user){
-  const {data:prof}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
-  if(prof){
-    if(!prof.active){await sb.auth.signOut();return banner('บัญชีถูกระงับ',true);}
-    session={id:prof.id,role:prof.role,name:prof.name,username:prof.username,active:true};
-    banner('กำลังโหลดข้อมูล...');await loadFromSupabase();soundOK();enterApp();return;
-  }
-  const {data:stu}=await sb.from('students').select('*').eq('user_id',user.id).maybeSingle();
-  if(stu){
-    session={id:'stu_'+stu.id,role:'student',name:stu.name,studentId:stu.id,username:stu.code};
-    banner('กำลังโหลดข้อมูล...');await loadFromSupabase();soundOK();enterApp();return;
-  }
-  await sb.auth.signOut();banner('ไม่พบบัญชีนี้ในระบบ',true);
+  
+  soundOK();
+  banner('เข้าสู่ระบบสำเร็จ');
+  enterApp();
 }
 async function loadFromSupabase(){
   const [rSet,rProf,rCls,rStu,rSubj,rSubCls,rAsg,rScore,rAtt,rLog,rCT,rItems,rSItems]=await Promise.all([
