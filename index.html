@@ -411,7 +411,6 @@ function studentSession(stu){return{id:'stu_'+stu.id,role:'student',name:stu.nam
 function persistSession(id){try{sessionStorage.setItem('cr_uid',id);}catch(e){}}
 
 /* ---------- LOGIN ---------- */
-/* ---------- LOGIN ---------- */
 async function doLogin(){
   const user=val('loginUser').trim();
   const pass=val('loginPass');
@@ -2126,7 +2125,31 @@ function exportCSV(){const rows=[['ห้องเรียน','เลขที
   dl(`students_${today()}.csv`,csv,'text/csv;charset=utf-8');banner('ส่งออก CSV แล้ว');}
 function exportJSON(){if(!isAdmin())return;dl(`backup_${today()}.json`,JSON.stringify(DB,null,2),'application/json');banner('สำรองข้อมูล JSON แล้ว');}
 
-
+async function logout(){
+  banner('กำลังออกจากระบบ...');
+  
+  // ออกจาก Supabase Auth
+  await sb.auth.signOut();
+  
+  // ล้าง session
+  session=null;
+  
+  // ล้างข้อมูล
+  classrooms=[];
+  students=[];
+  users=[];
+  
+  // ซ่อนหน้าแอพ แสดงหน้า login
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  
+  // ล้าง input
+  document.getElementById('loginUser').value='';
+  document.getElementById('loginPass').value='';
+  
+  soundOK();
+  banner('ออกจากระบบสำเร็จ');
+}
 </script>
 </body>
 </html>
