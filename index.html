@@ -498,10 +498,25 @@ async function doLogin(){
 
 // Boot: เช็คว่ามี session ค้างอยู่หรือไม่
 (async function boot(){
+// Render login brand
+function renderLoginBrand(){
+  const brand=document.getElementById('loginBrand');
+  if(brand){
+    brand.innerHTML=`
+      <div style="font-size:2.5rem;font-weight:700;color:#C4612F;margin-bottom:0.5rem;">
+        ระบบจัดการห้องเรียน
+      </div>
+      <div style="font-size:1rem;color:#5C635D;font-weight:300;">
+        เข้าสู่ระบบเพื่อเริ่มใช้งาน
+      </div>
+    `;
+  }
+}
+
+(async function boot(){
   renderLoginBrand();
   const {data}=await sb.auth.getSession();
   if(data?.session?.user){
-    // ✅ ครู/แอดมินที่ล็อกอินค้างอยู่
     const {data:profile}=await sb.from('profiles').select('role,name').eq('id',data.session.user.id).single();
     if(profile){
       session={
