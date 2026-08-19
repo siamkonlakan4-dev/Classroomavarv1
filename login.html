@@ -296,8 +296,8 @@
                             const passwordHash = await this.sha256(this.studentPassword);
 
                             const { data, error } = await sb.rpc('student_login', {
-                                stu_code: this.studentCode,
-                                password_hash: passwordHash
+                            stu_code: this.studentCode,
+                            password_hash: passwordHash
                             });
 
                             if (error) throw new Error('รหัสนักเรียนหรือรหัสผ่านไม่ถูกต้อง');
