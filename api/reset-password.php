@@ -9,9 +9,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // ⚠️ เปลี่ยนค่าเหล่านี้เป็นของคุณเอง
-$SUPABASE_URL = 'https://your-project.supabase.co';  // URL ของ Supabase
-$SERVICE_ROLE_KEY = 'eyJhbGci...';  // Service Role Key จาก Supabase Dashboard > Settings > API
-$ADMIN_TOKEN = 'secret_admin_2024';  // ตั้งรหัสลับขึ้นมาเอง
+$SUPABASE_URL = 'https://jburieqpvqjyelhqdnkd.supabase.co';  // URL ของ Supabase
+$SERVICE_ROLE_KEY = 'sb_secret_hsSzdG2W1eN-0gsmzQckjQ_ThXoAdar';  // Service Role Key จาก Supabase Dashboard > Settings > API
+$ADMIN_TOKEN = 'sun2542';  // ตั้งรหัสลับขึ้นมาเอง
 
 $input = json_decode(file_get_contents('php://input'), true);
 $user_id = $input['user_id'] ?? null;
