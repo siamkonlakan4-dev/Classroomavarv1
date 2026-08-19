@@ -411,6 +411,7 @@ function studentSession(stu){return{id:'stu_'+stu.id,role:'student',name:stu.nam
 function persistSession(id){try{sessionStorage.setItem('cr_uid',id);}catch(e){}}
 
 /* ---------- LOGIN ---------- */
+/* ---------- LOGIN ---------- */
 async function doLogin(){
   const user=val('loginUser').trim();
   const pass=val('loginPass');
@@ -422,15 +423,18 @@ async function doLogin(){
   
   banner('กำลังเข้าสู่ระบบ...');
   
+  // ถ้ากรอกแค่ username (ไม่มี @) → เติม @staff.local ให้
+  const email=user.includes('@') ? user : `${user}@staff.local`;
+  
   // Login ด้วย Supabase Auth
   const {data,error}=await sb.auth.signInWithPassword({
-    email:user,
+    email:email,
     password:pass
   });
   
   if(error){
     beep(300,.2,'sawtooth');
-    return banner('อีเมลหรือรหัสผ่านไม่ถูกต้อง',true);
+    return banner('Username หรือรหัสผ่านไม่ถูกต้อง',true);
   }
   
   // ดึงข้อมูล role จาก profiles
@@ -448,12 +452,24 @@ async function doLogin(){
   // ตั้ง session
   session={
     id:data.user.id,
-    username:data.user.email.split('@')[0],
+    username:email.split('@')[0],
     name:profile.name||'ครู',
     role:profile.role||'teacher'
   };
   
-  await loadFromSupabase();
+  // โหลดข้อมูลจาก Supabase
+  try{
+    const {data:cls}=await sb.from('classrooms').select('*').order('name');
+    const {data:stu}=await sb.from('students').select('*').order('name');
+    const {data:usr}=await sb.from('profiles').select('*').order('name');
+    
+    classrooms=cls||[];
+    students=stu||[];
+    users=usr||[];
+  }catch(e){
+    console.error('Load error:',e);
+  }
+  
   soundOK();
   banner('เข้าสู่ระบบสำเร็จ');
   enterApp();
@@ -493,7 +509,20 @@ function renderLoginBrand(){
         name:profile.name||'ครู',
         role:profile.role||'teacher'
       };
-      await loadFromSupabase();
+      
+      // โหลดข้อมูล
+      try{
+        const {data:cls}=await sb.from('classrooms').select('*').order('name');
+        const {data:stu}=await sb.from('students').select('*').order('name');
+        const {data:usr}=await sb.from('profiles').select('*').order('name');
+        
+        classrooms=cls||[];
+        students=stu||[];
+        users=usr||[];
+      }catch(e){
+        console.error('Load error:',e);
+      }
+      
       enterApp();
     }
   }
