@@ -422,25 +422,29 @@ async function doLogin(){
 
   // ตรวจสอบว่าเป็นรหัสนักเรียน (ตัวเลขล้วน)
   if(/^\d+$/.test(u)){
-    // นักเรียน → ตรวจสอบจาก database โดยตรง
-    const {data:students,error}=await sb.from('students').select('*').eq('student_code',u);
-    
-    if(error||!students||students.length===0){
-      beep(300,.2,'sawtooth');
-      return banner('ไม่พบรหัสนักเรียนนี้',true);
-    }
-    
-    const s=students[0];
+    // นักเรียน → เรียก Function ตรวจสอบ
     const hash=await sha256(p);
     
-    // ตรวจสอบรหัสปกติหรือรหัสชั่วคราว
-    const validNormal = s.password_hash && s.password_hash === hash;
-    const validTemp = s.temp_pw && s.temp_pw === hash;
+    const {data,error}=await sb.rpc('student_login',{
+      stu_code:u,
+      password:hash
+    });
     
-    if(!validNormal && !validTemp){
+    if(error){
+      console.error('Login error:',error);
       beep(300,.2,'sawtooth');
+      return banner('เกิดข้อผิดพลาด กรุณาลองใหม่',true);
+    }
+    
+    if(!data.success){
+      beep(300,.2,'sawtooth');
+      if(data.error==='student_not_found'){
+        return banner('ไม่พบรหัสนักเรียนนี้',true);
+      }
       return banner('รหัสผ่านไม่ถูกต้อง',true);
     }
+    
+    const s=data.student;
     
     // เข้าระบบสำเร็จ
     session={
@@ -451,8 +455,8 @@ async function doLogin(){
       username:s.student_code
     };
     
-    // ถ้าใช้รหัสชั่วคราว → บังคับเปลี่ยน
-    if(validTemp || s.must_change){
+    // ถ้าใช้รหัสชั่วคราวหรือต้องเปลี่ยน → บังคับเปลี่ยน
+    if(s.used_temp || s.must_change){
       banner('กำลังโหลดข้อมูล...');
       await loadFromSupabase();
       soundOK();
@@ -486,7 +490,6 @@ async function doLogin(){
   }
   await afterAuth(auth.user);
 }
-
 // ดึงโปรไฟล์/บทบาทจาก Supabase แล้วเข้าแอป
 async function afterAuth(user){
   const {data:prof}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
