@@ -322,6 +322,12 @@ const ROLECOLOR={admin:'var(--gRed)',teacher:'var(--gBlue)',student:'var(--gGree
 /* ---------- BIRTHDATE / PASSWORD HELPERS ---------- */
 const validBirth=b=>/^\d{8}$/.test(b||'');
 function fmtBirth(b){if(!validBirth(b))return b||'-';const d=b.slice(0,2),m=+b.slice(2,4),y=b.slice(4);return`${+d} ${THMONTHS[m-1]||''} ${y}`;}
+async function sha256(message) {
+  const msgBuffer = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
 async function sha256(s){
   if(window.crypto&&crypto.subtle){
     const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));
@@ -417,7 +423,7 @@ async function doLogin(){
   // ตรวจสอบว่าเป็นรหัสนักเรียน (ตัวเลขล้วน)
   if(/^\d+$/.test(u)){
     // นักเรียน → ตรวจสอบจาก database โดยตรง
-    const {data:students,error}=await sb.from('students').select('*').eq('code',u);
+    const {data:students,error}=await sb.from('students').select('*').eq('student_code',u);
     
     if(error||!students||students.length===0){
       beep(300,.2,'sawtooth');
@@ -442,7 +448,7 @@ async function doLogin(){
       role:'student',
       name:s.name,
       studentId:s.id,
-      username:s.code
+      username:s.student_code
     };
     
     // ถ้าใช้รหัสชั่วคราว → บังคับเปลี่ยน
