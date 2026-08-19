@@ -2125,6 +2125,9 @@ function exportCSV(){const rows=[['ห้องเรียน','เลขที
   dl(`students_${today()}.csv`,csv,'text/csv;charset=utf-8');banner('ส่งออก CSV แล้ว');}
 function exportJSON(){if(!isAdmin())return;dl(`backup_${today()}.json`,JSON.stringify(DB,null,2),'application/json');banner('สำรองข้อมูล JSON แล้ว');}
 
+
+
+/* ---------- LOG OUT ---------- */
 async function logout(){
   banner('กำลังออกจากระบบ...');
   
@@ -2139,16 +2142,13 @@ async function logout(){
   students=[];
   users=[];
   
-  // ซ่อนหน้าแอพ แสดงหน้า login
-  document.getElementById('app').classList.add('hidden');
-  document.getElementById('loginScreen').classList.remove('hidden');
-  
-  // ล้าง input
-  document.getElementById('loginUser').value='';
-  document.getElementById('loginPass').value='';
-  
   soundOK();
   banner('ออกจากระบบสำเร็จ');
+  
+  // รีเฟรชหน้าอัตโนมัติ
+  setTimeout(()=>{
+    window.location.reload();
+  },500);
 }
 </script>
 </body>
