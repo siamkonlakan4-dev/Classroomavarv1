@@ -328,13 +328,7 @@ async function sha256(message) {
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
-async function sha256(s){
-  if(window.crypto&&crypto.subtle){
-    const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));
-    return 'sha256$'+Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  }
-  let h=5381;for(const c of s)h=((h<<5)+h+c.charCodeAt(0))>>>0;return 'weak$'+h.toString(16);
-}
+
 async function verifyPw(pw,stored){if(!stored)return false;if(stored.startsWith('plain$'))return pw===stored.slice(6);return(await sha256(pw))===stored;}
 /* รหัสนักเรียนต้องไม่ซ้ำ (คีย์หลัก) */
 function codeExists(code,exceptId){if(!code)return false;return DB.students.some(s=>String(s.code||'')===String(code)&&s.id!==exceptId);}
