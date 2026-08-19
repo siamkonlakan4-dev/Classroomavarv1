@@ -422,39 +422,91 @@ async function doLogin(){
   
   banner('กำลังเข้าสู่ระบบ...');
   
-  // ถ้ากรอกแค่ username (ไม่มี @) → เติม @staff.local ให้
-  const email=user.includes('@') ? user : `${user}@staff.local`;
+  // ตรวจสอบว่าเป็นครู/แอดมิน หรือนักเรียน
+  const isStaff=user.includes('@') || isNaN(user);
   
-  // Login ด้วย Supabase Auth
-  const {data,error}=await sb.auth.signInWithPassword({
-    email:email,
-    password:pass
-  });
-  
-  if(error){
-    beep(300,.2,'sawtooth');
-    return banner('Username หรือรหัสผ่านไม่ถูกต้อง',true);
+  if(isStaff){
+    // ============ LOGIN ครู/แอดมิน ============
+    const email=user.includes('@') ? user : `${user}@staff.local`;
+    
+    const {data,error}=await sb.auth.signInWithPassword({
+      email:email,
+      password:pass
+    });
+    
+    if(error){
+      beep(300,.2,'sawtooth');
+      return banner('Username หรือรหัสผ่านไม่ถูกต้อง',true);
+    }
+    
+    // ดึงข้อมูล role จาก profiles
+    const {data:profile,error:profError}=await sb
+      .from('profiles')
+      .select('role,name')
+      .eq('id',data.user.id)
+      .single();
+    
+    if(profError||!profile){
+      beep(300,.2,'sawtooth');
+      return banner('ไม่พบข้อมูลผู้ใช้',true);
+    }
+    
+    // ตั้ง session
+    session={
+      id:data.user.id,
+      username:email.split('@')[0],
+      name:profile.name||'ครู',
+      role:profile.role||'teacher'
+    };
+    
+  }else{
+    // ============ LOGIN นักเรียน ============
+    const studentCode=user;
+    const hash=await sha256(pass);
+    
+    const {data,error}=await sb.rpc('student_login',{
+      stu_code:studentCode,
+      password_hash:hash
+    });
+    
+    if(error){
+      beep(300,.2,'sawtooth');
+      return banner('รหัสนักเรียนหรือรหัสผ่านไม่ถูกต้อง',true);
+    }
+    
+    if(!data||data.length===0){
+      beep(300,.2,'sawtooth');
+      return banner('ไม่สามารถเข้าสู่ระบบได้',true);
+    }
+    
+    const student=data[0];
+    
+    // ตรวจสอบว่าต้องเปลี่ยนรหัสหรือไม่
+    if(student.must_change){
+      // เก็บข้อมูลไว้ใน temp
+      window.tempStudentData={
+        id:student.id,
+        name:student.name,
+        code:studentCode
+      };
+      
+      soundOK();
+      banner('กรุณาตั้งรหัสผ่านใหม่');
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('forceScreen').classList.remove('hidden');
+      document.getElementById('fcName').textContent=`สวัสดี ${student.name} · กรุณาตั้งรหัสผ่านส่วนตัว`;
+      return;
+    }
+    
+    // ตั้ง session นักเรียน
+    session={
+      id:'stu_'+student.id,
+      role:'student',
+      name:student.name,
+      studentId:student.id,
+      username:studentCode
+    };
   }
-  
-  // ดึงข้อมูล role จาก profiles
-  const {data:profile,error:profError}=await sb
-    .from('profiles')
-    .select('role,name')
-    .eq('id',data.user.id)
-    .single();
-  
-  if(profError||!profile){
-    beep(300,.2,'sawtooth');
-    return banner('ไม่พบข้อมูลผู้ใช้',true);
-  }
-  
-  // ตั้ง session
-  session={
-    id:data.user.id,
-    username:email.split('@')[0],
-    name:profile.name||'ครู',
-    role:profile.role||'teacher'
-  };
   
   // โหลดข้อมูลจาก Supabase
   try{
@@ -473,59 +525,6 @@ async function doLogin(){
   banner('เข้าสู่ระบบสำเร็จ');
   enterApp();
 }
-
-// Render login brand
-function renderLoginBrand(){
-  const brand=document.getElementById('loginBrand');
-  if(brand){
-    brand.innerHTML=`
-      <div style="font-size:2.5rem;font-weight:700;color:#C4612F;margin-bottom:0.5rem;">
-        ระบบจัดการห้องเรียน
-      </div>
-      <div style="font-size:1rem;color:#5C635D;font-weight:300;">
-        เข้าสู่ระบบเพื่อเริ่มใช้งาน
-      </div>
-    `;
-  }
-}
-
-// Boot: เช็คว่ามี session ค้างอยู่หรือไม่
-(async function boot(){
-  renderLoginBrand();
-  
-  const {data}=await sb.auth.getSession();
-  if(data?.session?.user){
-    const {data:profile}=await sb
-      .from('profiles')
-      .select('role,name')
-      .eq('id',data.session.user.id)
-      .single();
-    
-    if(profile){
-      session={
-        id:data.session.user.id,
-        username:data.session.user.email.split('@')[0],
-        name:profile.name||'ครู',
-        role:profile.role||'teacher'
-      };
-      
-      // โหลดข้อมูล
-      try{
-        const {data:cls}=await sb.from('classrooms').select('*').order('name');
-        const {data:stu}=await sb.from('students').select('*').order('name');
-        const {data:usr}=await sb.from('profiles').select('*').order('name');
-        
-        classrooms=cls||[];
-        students=stu||[];
-        users=usr||[];
-      }catch(e){
-        console.error('Load error:',e);
-      }
-      
-      enterApp();
-    }
-  }
-})();
   
 /* ---------- FORCE PASSWORD CHANGE (นักเรียน) ---------- */
 function showForceChange(){const stu=DB.students.find(s=>s.id===session.studentId);
