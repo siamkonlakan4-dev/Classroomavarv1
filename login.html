@@ -291,35 +291,35 @@
                             localStorage.setItem('userId', data.user.id);
                             this.enterApp();
 
-} else {
-    // นักเรียน → ใช้ Function student_login
-    const passwordHash = await this.sha256(this.studentPassword);
+                            } else {
+                                // นักเรียน → ใช้ Function student_login
+                                const passwordHash = await this.sha256(this.studentPassword);
 
-    const { data, error } = await sb.rpc('student_login', {
-        stu_code: this.studentCode,
-        password_hash: passwordHash
-    });
+                                const { data, error } = await sb.rpc('student_login', {
+                                    stu_code: this.studentCode,
+                                    password_hash: passwordHash
+                                });
 
-    if (error) throw new Error('รหัสนักเรียนหรือรหัสผ่านไม่ถูกต้อง');
-    
-    // ✅ แก้: data เป็น array
-    if (!data || data.length === 0) {
-        throw new Error('ไม่สามารถเข้าสู่ระบบได้');
-    }
+                                if (error) throw new Error('รหัสนักเรียนหรือรหัสผ่านไม่ถูกต้อง');
+        
+                                // ✅ แก้: data เป็น array
+                                if (!data || data.length === 0) {
+                                    throw new Error('ไม่สามารถเข้าสู่ระบบได้');
+                                }
 
-    const student = data[0]; // เอา object แรกออกมา
+                                const student = data[0]; // เอา object แรกออกมา
 
-    // ถ้า must_change = true → บังคับเปลี่ยนรหัส
-    if (student.must_change) {
-        this.currentStudentId = student.id;
-        this.showForceChange = true;
-    } else {
-        localStorage.setItem('userRole', 'student');
-        localStorage.setItem('userId', student.id);
-        localStorage.setItem('studentName', student.name || 'นักเรียน');
-        this.enterApp();
-    }
-}
+                                // ถ้า must_change = true → บังคับเปลี่ยนรหัส
+                                if (student.must_change) {
+                                    this.currentStudentId = student.id;
+                                    this.showForceChange = true;
+                                } else {
+                                    localStorage.setItem('userRole', 'student');
+                                    localStorage.setItem('userId', student.id);
+                                    localStorage.setItem('studentName', student.name || 'นักเรียน');
+                                    this.enterApp();
+                                }
+                            }
                     } catch (err) {
                         this.errorMessage = err.message;
                     } finally {
