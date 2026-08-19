@@ -422,82 +422,43 @@ async function doLogin(){
   
   banner('กำลังเข้าสู่ระบบ...');
   
-  // ครู/แอดมิน - ใช้ Supabase Auth
-  if(user.includes('@')){
-    const {data,error}=await sb.auth.signInWithPassword({email:user,password:pass});
-    if(error){
-      beep(300,.2,'sawtooth');
-      return banner('อีเมลหรือรหัสผ่านไม่ถูกต้อง',true);
-    }
-    
-    // ดึงข้อมูล role จาก profiles
-    const {data:profile,error:profError}=await sb.from('profiles').select('role,name').eq('id',data.user.id).single();
-    if(profError||!profile){
-      beep(300,.2,'sawtooth');
-      return banner('ไม่พบข้อมูลผู้ใช้',true);
-    }
-    
-    session={
-      id:data.user.id,
-      username:data.user.email.split('@')[0],
-      name:profile.name||'ครู',
-      role:profile.role||'teacher'
-    };
-    
-    await loadFromSupabase();
-    soundOK();
-    banner('เข้าสู่ระบบสำเร็จ');
-    return enterApp();
-  }
-  
-  // นักเรียน - ใช้ Function student_login
-  const hash=await sha256(pass);
-  const {data,error}=await sb.rpc('student_login',{
-    stu_code:user,        // ✅ แก้จาก stu_id
-    password_hash:hash    // ✅ แก้จาก pw_hash
+  // Login ด้วย Supabase Auth
+  const {data,error}=await sb.auth.signInWithPassword({
+    email:user,
+    password:pass
   });
   
   if(error){
     beep(300,.2,'sawtooth');
-    return banner('รหัสนักเรียนหรือรหัสผ่านไม่ถูกต้อง: '+error.message,true);
+    return banner('อีเมลหรือรหัสผ่านไม่ถูกต้อง',true);
   }
   
-  // ✅ data เป็น array
-  if(!data||data.length===0){
+  // ดึงข้อมูล role จาก profiles
+  const {data:profile,error:profError}=await sb
+    .from('profiles')
+    .select('role,name')
+    .eq('id',data.user.id)
+    .single();
+  
+  if(profError||!profile){
     beep(300,.2,'sawtooth');
-    return banner('ไม่สามารถเข้าสู่ระบบได้',true);
+    return banner('ไม่พบข้อมูลผู้ใช้',true);
   }
   
-  const student=data[0]; // ✅ เอา object แรก
-  
-  // ตั้ง session นักเรียน
+  // ตั้ง session
   session={
-    id:'stu_'+student.id,
-    role:'student',
-    name:student.name,
-    studentId:student.id,
-    username:user
+    id:data.user.id,
+    username:data.user.email.split('@')[0],
+    name:profile.name||'ครู',
+    role:profile.role||'teacher'
   };
   
   await loadFromSupabase();
-  
-  // ตรวจสอบว่าต้องเปลี่ยนรหัสหรือไม่
-  if(student.must_change){
-    soundOK();
-    banner('กรุณาตั้งรหัสผ่านใหม่');
-    document.getElementById('loginScreen').classList.add('hidden');
-    document.getElementById('forceScreen').classList.remove('hidden');
-    document.getElementById('fcName').textContent=`สวัสดี ${student.name} · กรุณาตั้งรหัสผ่านส่วนตัว`;
-    return;
-  }
-  
   soundOK();
   banner('เข้าสู่ระบบสำเร็จ');
   enterApp();
 }
 
-// Boot: เช็คว่ามี session ค้างอยู่หรือไม่
-(async function boot(){
 // Render login brand
 function renderLoginBrand(){
   const brand=document.getElementById('loginBrand');
@@ -513,11 +474,18 @@ function renderLoginBrand(){
   }
 }
 
+// Boot: เช็คว่ามี session ค้างอยู่หรือไม่
 (async function boot(){
   renderLoginBrand();
+  
   const {data}=await sb.auth.getSession();
   if(data?.session?.user){
-    const {data:profile}=await sb.from('profiles').select('role,name').eq('id',data.session.user.id).single();
+    const {data:profile}=await sb
+      .from('profiles')
+      .select('role,name')
+      .eq('id',data.session.user.id)
+      .single();
+    
     if(profile){
       session={
         id:data.session.user.id,
@@ -531,8 +499,6 @@ function renderLoginBrand(){
   }
 })();
   
-
-
 /* ---------- FORCE PASSWORD CHANGE (นักเรียน) ---------- */
 function showForceChange(){const stu=DB.students.find(s=>s.id===session.studentId);
   document.getElementById('loginScreen').classList.add('hidden');
