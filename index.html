@@ -914,6 +914,37 @@ async function resetStuToBirth(id){
   studentModal(id);
 }
 async function setStuTempPw(id){
+  const s=DB.students.find(x=>x.id===id);
+  if(!s) return;
+  
+  const tmp=prompt(`กำหนดรหัสชั่วคราวให้ "${s.name}" (อย่างน้อย 6 ตัวอักษร)\nนักเรียนจะถูกบังคับให้ตั้งรหัสใหม่หลังเข้าระบบ`);
+  if(tmp===null) return;
+  
+  const t=tmp.trim();
+  if(t.length<6) return banner('รหัสชั่วคราวอย่างน้อย 6 ตัวอักษร (ตาม Supabase)',true);
+  
+  banner('กำลังตั้งรหัสชั่วคราว...');
+  
+  const tempHash = await sha256(t);
+  
+  const {error} = await sb.from('students').update({
+    temp_pw: tempHash,
+    must_change: true
+  }).eq('id', id);
+  
+  if(error){
+    return banner('ตั้งรหัสไม่สำเร็จ: ' + error.message, true);
+  }
+  
+  s.temp_pw = tempHash;
+  s.mustChange = true;
+  logAction({type:'student',detail:'ตั้งรหัสชั่วคราวให้นักเรียน',byName:s.name});
+  save();
+  
+  banner('✅ ตั้งรหัสชั่วคราวแล้ว: '+t);
+  studentModal(id);
+}
+
 function avatarStudio(){const a=window._tmpAvatar||defaultAvatar('x');
   openModal(`<h2>🎨 Avatar Studio</h2><div style="text-align:center;margin-bottom:18px">${avatarSVG(a,120)}</div>
     <label class="fl">สีตัว</label><div class="row" style="margin-bottom:14px">${PALETTE.map(c=>`<div onclick="setAv('color','${c}')" style="width:34px;height:34px;border-radius:50%;background:${c};cursor:pointer;border:3px solid ${a.color===c?'#1c1c1e':'#fff'};box-shadow:0 2px 6px rgba(0,0,0,.12)"></div>`).join('')}</div>
