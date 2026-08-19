@@ -414,18 +414,70 @@ async function doLogin(){
   const u=val('loginUser'),p=val('loginPass');
   if(!u||!p)return banner('กรอกชื่อผู้ใช้และรหัสผ่าน',true);
 
-  // หา email สำหรับ login
+  // ตรวจสอบว่าเป็นรหัสนักเรียน (ตัวเลขล้วน)
+  if(/^\d+$/.test(u)){
+    // นักเรียน → ตรวจสอบจาก database โดยตรง
+    const {data:students,error}=await sb.from('students').select('*').eq('code',u);
+    
+    if(error||!students||students.length===0){
+      beep(300,.2,'sawtooth');
+      return banner('ไม่พบรหัสนักเรียนนี้',true);
+    }
+    
+    const s=students[0];
+    const hash=await sha256(p);
+    
+    // ตรวจสอบรหัสปกติหรือรหัสชั่วคราว
+    const validNormal = s.password_hash && s.password_hash === hash;
+    const validTemp = s.temp_pw && s.temp_pw === hash;
+    
+    if(!validNormal && !validTemp){
+      beep(300,.2,'sawtooth');
+      return banner('รหัสผ่านไม่ถูกต้อง',true);
+    }
+    
+    // เข้าระบบสำเร็จ
+    session={
+      id:'stu_'+s.id,
+      role:'student',
+      name:s.name,
+      studentId:s.id,
+      username:s.code
+    };
+    
+    // ถ้าใช้รหัสชั่วคราว → บังคับเปลี่ยน
+    if(validTemp || s.must_change){
+      banner('กำลังโหลดข้อมูล...');
+      await loadFromSupabase();
+      soundOK();
+      showForceChange();
+      return;
+    }
+    
+    banner('กำลังโหลดข้อมูล...');
+    await loadFromSupabase();
+    soundOK();
+    enterApp();
+    return;
+  }
+
+  // ครู/แอดมิน → ใช้ Supabase Auth
   let email;
-  if(u.includes('@')) email=u;                                  // กรอก email ตรง ๆ
-  else if(/^\d+$/.test(u)) email=`s${u}@students.local`;        // ตัวเลขล้วน = รหัสนักเรียน
-  else {                                                         // ไม่งั้นถือเป็น username ครู
+  if(u.includes('@')) email=u;
+  else {
     const {data,error}=await sb.rpc('email_for_username',{uname:u});
-    if(error||!data){beep(300,.2,'sawtooth');return banner('ไม่พบชื่อผู้ใช้นี้',true);}
+    if(error||!data){
+      beep(300,.2,'sawtooth');
+      return banner('ไม่พบชื่อผู้ใช้นี้',true);
+    }
     email=data;
   }
 
   const {data:auth,error}=await sb.auth.signInWithPassword({email,password:p});
-  if(error){beep(300,.2,'sawtooth');return banner('เข้าสู่ระบบไม่สำเร็จ ตรวจรหัสผ่าน',true);}
+  if(error){
+    beep(300,.2,'sawtooth');
+    return banner('เข้าสู่ระบบไม่สำเร็จ ตรวจรหัสผ่าน',true);
+  }
   await afterAuth(auth.user);
 }
 
