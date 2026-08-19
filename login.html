@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เข้าสู่ระบบ - ระบบจัดการห้องเรียน</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+            max-width: 900px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+        }
+        .login-left {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 60px 40px;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .login-left h1 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+        .login-left p {
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+        .login-right {
+            padding: 60px 40px;
+        }
+        .login-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            color: #999;
+            font-size: 1rem;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.3s;
+        }
+        .tab.active {
+            color: #667eea;
+            font-weight: 600;
+        }
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #667eea;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .btn-login {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .btn-login:hover {
+            transform: translateY(-2px);
+        }
+        .btn-login:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #c33;
+        }
+        .change-password-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            max-width: 400px;
+            width: 90%;
+        }
+        .modal-content h2 {
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+        .modal-content p {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 768px) {
+            .login-container {
+                grid-template-columns: 1fr;
+            }
+            .login-left {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="login-container">
+            <div class="login-left">
+                <h1>🎓 ระบบจัดการห้องเรียน</h1>
+                <p>ระบบบริหารจัดการนักเรียนและการเรียนการสอนแบบครบวงจร เหมาะสำหรับครู ผู้บริหาร และนักเรียน</p>
+            </div>
+
+            <div class="login-right">
+                <div class="login-tabs">
+                    <button class="tab" :class="{active: loginMode === 'teacher'}" @click="loginMode = 'teacher'">
+                        ครู/แอดมิน
+                    </button>
+                    <button class="tab" :class="{active: loginMode === 'student'}" @click="loginMode = 'student'">
+                        นักเรียน
+                    </button>
+                </div>
+
+                <div v-if="errorMessage" class="error-message">
+                    {{ errorMessage }}
+                </div>
+
+                <form @submit.prevent="doLogin">
+                    <!-- ฟอร์มครู/แอดมิน -->
+                    <div v-if="loginMode === 'teacher'">
+                        <div class="form-group">
+                            <label>อีเมล</label>
+                            <input type="email" v-model="teacherEmail" placeholder="teacher@school.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label>รหัสผ่าน</label>
+                            <input type="password" v-model="teacherPassword" placeholder="••••••••" required>
+                        </div>
+                    </div>
+
+                    <!-- ฟอร์มนักเรียน -->
+                    <div v-else>
+                        <div class="form-group">
+                            <label>รหัสนักเรียน</label>
+                            <input type="text" v-model="studentCode" placeholder="เช่น 12345" required>
+                        </div>
+                        <div class="form-group">
+                            <label>รหัสผ่าน</label>
+                            <input type="password" v-model="studentPassword" placeholder="วันเกิด 8 หลัก (พ.ศ.) หรือรหัสที่ตั้งไว้" required>
+                        </div>
+                        <p style="color: #999; font-size: 0.9rem; margin-top: -10px; margin-bottom: 20px;">
+                            💡 เข้าครั้งแรก ใช้วันเกิด เช่น 02022542 (2 ก.พ. 2542)
+                        </p>
+                    </div>
+
+                    <button type="submit" class="btn-login" :disabled="loading">
+                        {{ loading ? '⏳ กำลังเข้าสู่ระบบ...' : '🔐 เข้าสู่ระบบ' }}
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Modal บังคับเปลี่ยนรหัสผ่าน -->
+        <div v-if="showForceChange" class="change-password-modal">
+            <div class="modal-content">
+                <h2>⚠️ ตั้งรหัสผ่านใหม่</h2>
+                <p>กรุณาเปลี่ยนรหัสผ่านก่อนเข้าใช้งาน</p>
+
+                <div class="form-group">
+                    <label>รหัสผ่านใหม่</label>
+                    <input type="password" v-model="newPassword" placeholder="อย่างน้อย 4 ตัวอักษร" required>
+                </div>
+                <div class="form-group">
+                    <label>ยืนยันรหัสผ่าน</label>
+                    <input type="password" v-model="confirmPassword" placeholder="พิมพ์รหัสผ่านอีกครั้ง" required>
+                </div>
+
+                <button class="btn-login" @click="changePasswordNow" :disabled="loading">
+                    {{ loading ? '⏳ กำลังบันทึก...' : '✅ บันทึกรหัสผ่าน' }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        const { createClient } = supabase;
+
+        const SUPABASE_URL = 'https://fhnmbjdimptzjybnmlcg.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZobm1iamRpbXB0emp5Ym5tbGNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY3NjAyODcsImV4cCI6MjA1MjMzNjI4N30.ThrqsgjVEJxocTK4wPUqM3jJaPGh0njj5IaqkSS8hio';
+        const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        createApp({
+            data() {
+                return {
+                    loginMode: 'teacher',
+                    teacherEmail: '',
+                    teacherPassword: '',
+                    studentCode: '',
+                    studentPassword: '',
+                    errorMessage: '',
+                    loading: false,
+                    showForceChange: false,
+                    newPassword: '',
+                    confirmPassword: '',
+                    currentStudentId: null
+                };
+            },
+            methods: {
+                async doLogin() {
+                    this.errorMessage = '';
+                    this.loading = true;
+
+                    try {
+                        if (this.loginMode === 'teacher') {
+                            // ครู/แอดมิน → ใช้ Supabase Auth
+                            const { data, error } = await sb.auth.signInWithPassword({
+                                email: this.teacherEmail,
+                                password: this.teacherPassword
+                            });
+
+                            if (error) throw new Error('อีเมลหรือรหัสผ่านไม่ถูกต้อง');
+
+                            // ตรวจสอบ role
+                            const { data: userData, error: userError } = await sb
+                                .from('users')
+                                .select('role')
+                                .eq('id', data.user.id)
+                                .single();
+
+                            if (userError || !userData) throw new Error('ไม่พบข้อมูลผู้ใช้');
+
+                            localStorage.setItem('userRole', userData.role);
+                            localStorage.setItem('userId', data.user.id);
+                            this.enterApp();
+
+                        } else {
+                            // นักเรียน → ใช้ Function student_login
+                            const passwordHash = await this.sha256(this.studentPassword);
+
+                            const { data, error } = await sb.rpc('student_login', {
+                                stu_code: this.studentCode,
+                                password_hash: passwordHash
+                            });
+
+                            if (error) throw new Error('รหัสนักเรียนหรือรหัสผ่านไม่ถูกต้อง');
+                            if (!data || !data.id) throw new Error('ไม่สามารถเข้าสู่ระบบได้');
+
+                            // ถ้า must_change = true → บังคับเปลี่ยนรหัส
+                            if (data.must_change) {
+                                this.currentStudentId = data.id;
+                                this.showForceChange = true;
+                            } else {
+                                localStorage.setItem('userRole', 'student');
+                                localStorage.setItem('userId', data.id);
+                                localStorage.setItem('studentName', data.name || 'นักเรียน');
+                                this.enterApp();
+                            }
+                        }
+                    } catch (err) {
+                        this.errorMessage = err.message;
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async changePasswordNow() {
+                    if (this.newPassword.length < 4) {
+                        this.errorMessage = 'รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร';
+                        return;
+                    }
+                    if (this.newPassword !== this.confirmPassword) {
+                        this.errorMessage = 'รหัสผ่านไม่ตรงกัน';
+                        return;
+                    }
+
+                    this.loading = true;
+                    this.errorMessage = '';
+
+                    try {
+                        const passwordHash = await this.sha256(this.newPassword);
+
+                        const { error } = await sb
+                            .from('students')
+                            .update({
+                                password_hash: passwordHash,
+                                temp_pw: null,
+                                must_change: false
+                            })
+                            .eq('id', this.currentStudentId);
+
+                        if (error) throw error;
+
+                        // ตั้งรหัสผ่านสำเร็จ → เข้าระบบ
+                        const { data: student } = await sb
+                            .from('students')
+                            .select('name')
+                            .eq('id', this.currentStudentId)
+                            .single();
+
+                        localStorage.setItem('userRole', 'student');
+                        localStorage.setItem('userId', this.currentStudentId);
+                        localStorage.setItem('studentName', student?.name || 'นักเรียน');
+                        this.enterApp();
+
+                    } catch (err) {
+                        this.errorMessage = 'ไม่สามารถบันทึกรหัสผ่านได้: ' + err.message;
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async sha256(text) {
+                    const encoder = new TextEncoder();
+                    const data = encoder.encode(text);
+                    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                    return 'sha256$' + hashHex;
+                },
+
+                enterApp() {
+                    window.location.href = '/';
+                }
+            },
+
+            async mounted() {
+                // ตรวจสอบว่า login อยู่แล้วหรือไม่
+                const { data } = await sb.auth.getSession();
+                if (data.session) {
+                    this.enterApp();
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
