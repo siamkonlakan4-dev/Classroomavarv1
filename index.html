@@ -601,6 +601,30 @@ async function submitForceChange(){
   if(p1.length<4)return banner('รหัสผ่านอย่างน้อย 4 ตัวอักษร',true);
   if(p1!==p2)return banner('รหัสผ่านยืนยันไม่ตรงกัน',true);
   if(stu&&validBirth(stu.birthdate)&&p1===stu.birthdate)return banner('ห้ามตั้งรหัสเป็นวันเกิด เลือกรหัสใหม่',true);
+
+  // ✅ สำหรับนักเรียน → เก็บ hash ลง password_hash
+  banner('กำลังตั้งรหัสผ่าน...');
+  const hash=await sha256(p1);
+  
+  const {data,error}=await sb.rpc('set_student_password',{
+    stu_id:session.studentId,
+    new_password:hash
+  });
+  
+  if(error||!data.success){
+    beep(300,.2,'sawtooth');
+    return banner('ตั้งรหัสไม่สำเร็จ กรุณาลองใหม่',true);
+  }
+  
+  if(stu)stu.mustChange=false;
+  document.getElementById('forceScreen').classList.add('hidden');
+  soundOK();
+  banner('ตั้งรหัสผ่านเรียบร้อย');
+  enterApp();
+}
+  if(p1.length<4)return banner('รหัสผ่านอย่างน้อย 4 ตัวอักษร',true);
+  if(p1!==p2)return banner('รหัสผ่านยืนยันไม่ตรงกัน',true);
+  if(stu&&validBirth(stu.birthdate)&&p1===stu.birthdate)return banner('ห้ามตั้งรหัสเป็นวันเกิด เลือกรหัสใหม่',true);
   const {error}=await sb.auth.updateUser({password:p1});
   if(error)return banner('ตั้งรหัสไม่สำเร็จ: '+error.message,true);
   await sb.from('students').update({must_change:false}).eq('id',session.studentId);
