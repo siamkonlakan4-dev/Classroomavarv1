@@ -1478,24 +1478,31 @@ async function commitManual(){
   const rows=[];
   const toMark=[];
   
-  // 🔥 เช็คทีละคนว่าเช็กแล้วหรือยัง (เหมือนรับงาน)
+  console.log('🔍 เริ่มเช็ค', ids.length, 'คน');
+  
   for(const id of ids){
     const s=DB.students.find(x=>x.id===id);
     if(!s) continue;
     
-    const {data:existing} = await sb.from('attendance')
+    const {data:existing, error} = await sb.from('attendance')
       .select('status')
       .eq('student_id', id)
       .eq('subject_id', scanSubjId)
       .eq('date', scanDate)
       .maybeSingle();
     
-    // ถ้ายังไม่เช็ก ให้เพิ่มใน rows
+    console.log('👤', s.name, '→ existing:', existing, 'error:', error);
+    
     if(!existing){
       rows.push({student_id:id, subject_id:scanSubjId, date:scanDate, status:manualMode});
       toMark.push(s);
+      console.log('✅ เพิ่มใน rows');
+    } else {
+      console.log('⚠️ เช็กแล้ว:', existing.status);
     }
   }
+  
+  console.log('📦 rows ที่จะบันทึก:', rows.length, rows);
   
   if(!rows.length){
     window._pending.clear();
@@ -1503,11 +1510,12 @@ async function commitManual(){
     return banner('นักเรียนที่เลือกเช็กชื่อหมดแล้ว',true);
   }
   
-  // 🔥 บันทึกลง Supabase
   const {error}=await sb.from('attendance').upsert(rows, {onConflict:'student_id,subject_id,date'});
+  
+  console.log('💾 บันทึก Supabase:', error ? '❌ '+error.message : '✅ สำเร็จ');
+  
   if(error) return banner('บันทึกไม่สำเร็จ: '+error.message,true);
   
-  // 🔥 อัปเดต memory หลังบันทึกสำเร็จ
   toMark.forEach(s=>{
     s.attendance=s.attendance||{};
     s.attendance[k]=manualMode;
