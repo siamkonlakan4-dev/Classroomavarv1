@@ -1445,9 +1445,14 @@ async function commitManual(){
   
   const k=attKey(scanSubjId,scanDate);
   const rows=[];
+  const toMark=[]; // เก็บ student object ที่จะอัปเดต
   
-  // 🔥 เช็คใน Supabase ก่อนว่าใครเช็กไปแล้วบ้าง
+  // เช็คทีละคนว่าใครเช็กแล้วบ้าง
   for(const id of ids){
+    const s=DB.students.find(x=>x.id===id);
+    if(!s)continue;
+    
+    // เช็คใน Supabase
     const {data:existing} = await sb.from('attendance')
       .select('status')
       .eq('student_id', id)
@@ -1457,6 +1462,7 @@ async function commitManual(){
     
     if(!existing){
       rows.push({student_id:id,subject_id:scanSubjId,date:scanDate,status:manualMode});
+      toMark.push(s);
     }
   }
   
@@ -1466,26 +1472,37 @@ async function commitManual(){
     return banner('นักเรียนที่เลือกเช็กชื่อหมดแล้ว',true);
   }
   
-  // บันทึกเฉพาะคนที่ยังไม่เช็ก
+  // บันทึกลง Supabase
   const {error}=await sb.from('attendance').upsert(rows,{onConflict:'student_id,subject_id,date'});
-  if(error)return banner('บันทึกไม่สำเร็จ: '+error.message,true);
+  if(error){
+    console.error('❌ Supabase error:',error);
+    return banner('บันทึกไม่สำเร็จ: '+error.message,true);
+  }
   
-  // อัปเดต memory
-  rows.forEach(r=>{
-    const s=DB.students.find(x=>x.id===r.student_id);
-    if(!s)return;
+  console.log('✅ บันทึก Supabase สำเร็จ:',rows);
+  
+  // อัปเดต local memory
+  toMark.forEach(s=>{
     s.attendance=s.attendance||{};
     s.attendance[k]=manualMode;
-    logAction({type:'att',name:s.name,classroom:ctx.cls.name,subject:ctx.sub?.name||'',status:manualMode,detail:ATTLABEL[manualMode]});
+    logAction({
+      type:'att',
+      name:s.name,
+      classroom:ctx.cls.name,
+      subject:ctx.sub?.name||'',
+      status:manualMode,
+      detail:ATTLABEL[manualMode]
+    });
   });
   
   window._pending.clear();
-  save();
+  save(); // บันทึก localStorage
   render();
   soundDone();
-  banner(`บันทึก "${ATTLABEL[manualMode]}" ${rows.length} คนเรียบร้อย`);
+  banner(`บันทึก "${ATTLABEL[manualMode]}" ${toMark.length} คนเรียบร้อย`);
 }
 
+  
 async function commitWork(){
   const ctx=scanCtx();if(!ctx||!window._pending.size)return;
   const a=DB.assignments.find(x=>x.id===scanAssignId);
