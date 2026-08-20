@@ -1436,17 +1436,55 @@ async function undoWork(aid,sid){const a=DB.assignments.find(x=>x.id===aid);if(!
 function setManualMode(m){manualMode=m;window._pending.clear();render();}
 function togglePending(id){if(window._pending.has(id))window._pending.delete(id);else window._pending.add(id);render();}
 function clearPending(){window._pending.clear();render();}
-async function commitManual(){const ctx=scanCtx();if(!ctx||!window._pending.size)return;
+async function commitManual(){
+  const ctx=scanCtx();
+  if(!ctx||!window._pending.size)return;
   const ids=[...window._pending];
+  
   if(!confirm(`บันทึกสถานะ "${ATTLABEL[manualMode]}" ให้นักเรียน ${ids.length} คน?\n(เมื่อบันทึกแล้วจะล็อก เช็กซ้ำไม่ได้)`))return;
-  const k=attKey(scanSubjId,scanDate);const rows=[],marked=[];
-  ids.forEach(id=>{const s=DB.students.find(x=>x.id===id);if(!s)return;s.attendance=s.attendance||{};if(s.attendance[k])return;
-    rows.push({student_id:id,subject_id:scanSubjId,date:scanDate,status:manualMode});marked.push(s);});
-  if(!rows.length){window._pending.clear();render();return;}
+  
+  const k=attKey(scanSubjId,scanDate);
+  const rows=[];
+  
+  // 🔥 เช็คใน Supabase ก่อนว่าใครเช็กไปแล้วบ้าง
+  for(const id of ids){
+    const {data:existing} = await sb.from('attendance')
+      .select('status')
+      .eq('student_id', id)
+      .eq('subject_id', scanSubjId)
+      .eq('date', scanDate)
+      .maybeSingle();
+    
+    if(!existing){
+      rows.push({student_id:id,subject_id:scanSubjId,date:scanDate,status:manualMode});
+    }
+  }
+  
+  if(!rows.length){
+    window._pending.clear();
+    render();
+    return banner('นักเรียนที่เลือกเช็กชื่อหมดแล้ว',true);
+  }
+  
+  // บันทึกเฉพาะคนที่ยังไม่เช็ก
   const {error}=await sb.from('attendance').upsert(rows,{onConflict:'student_id,subject_id,date'});
   if(error)return banner('บันทึกไม่สำเร็จ: '+error.message,true);
-  marked.forEach(s=>{s.attendance[k]=manualMode;logAction({type:'att',name:s.name,classroom:ctx.cls.name,subject:ctx.sub?.name||'',status:manualMode,detail:ATTLABEL[manualMode]});});
-  window._pending.clear();save();render();soundDone();banner(`บันทึก "${ATTLABEL[manualMode]}" ${marked.length} คนเรียบร้อย`);}
+  
+  // อัปเดต memory
+  rows.forEach(r=>{
+    const s=DB.students.find(x=>x.id===r.student_id);
+    if(!s)return;
+    s.attendance=s.attendance||{};
+    s.attendance[k]=manualMode;
+    logAction({type:'att',name:s.name,classroom:ctx.cls.name,subject:ctx.sub?.name||'',status:manualMode,detail:ATTLABEL[manualMode]});
+  });
+  
+  window._pending.clear();
+  save();
+  render();
+  soundDone();
+  banner(`บันทึก "${ATTLABEL[manualMode]}" ${rows.length} คนเรียบร้อย`);
+}
 
 async function commitWork(){
   const ctx=scanCtx();if(!ctx||!window._pending.size)return;
