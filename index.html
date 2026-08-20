@@ -501,14 +501,14 @@ async function doLogin(){
       return;
     }
     
-    // ตั้ง session (เอา 'stu_' ออก)
+      // ตั้ง session (เอา 'stu_' ออก)
       session={
-      id:stuData.id,              // แก้จาก 'stu_'+stuData.id
-      role:'student',
-      name:stuData.name,
-      studentId:stuData.id,
-      username:stuData.code
-    };
+        id:student.id,              // แก้จาก stuData.id
+        role:'student',
+        name:student.name,          // แก้จาก stuData.name
+        studentId:student.id,       // แก้จาก stuData.id
+        username:studentCode        // แก้จาก stuData.code
+      };
   }
   
 // โหลดข้อมูลจาก Supabase
