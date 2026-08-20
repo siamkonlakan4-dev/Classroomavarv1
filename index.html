@@ -465,8 +465,10 @@ async function doLogin(){
     const hash=await sha256(pass);
     
     const {data,error}=await sb.rpc('student_login',{
+      params:{
       stu_code:studentCode,
       password_hash:hash
+      }
     });
     
     if(error){
