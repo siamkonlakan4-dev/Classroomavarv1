@@ -295,7 +295,7 @@ const sb=window.supabase.createClient(SB_URL,SB_ANON,{auth:{persistSession:true}
 let DB=load();
 let session=null;
 let settingsRowId=1;
-
+let CURRENT_USER = null;
 function blankDB(){return{
   systemName:'ระบบเช็กชื่อห้องเรียน',logo:'',school:'โรงเรียนตัวอย่าง',
   weights:{during:70,final:30},
