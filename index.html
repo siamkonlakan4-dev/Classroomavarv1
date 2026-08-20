@@ -1485,27 +1485,16 @@ async function commitManual(){
   const rows=[];
   const toMark=[];
   
-  console.log('🔍 เริ่มเช็ค', ids.length, 'คน');
-  
-  // 🔥 เช็คจาก memory แทน (เหมือนรับงาน)
   ids.forEach(id=>{
     const s=DB.students.find(x=>x.id===id);
     if(!s) return;
     
-    console.log('👤', s.name, '→ memory:', s.attendance[k]);
-    
-    // ถ้าเช็กแล้ว ข้าม
-    if(s.attendance[k]){
-      console.log('⚠️ เช็กแล้ว:', s.attendance[k]);
-      return;
-    }
+    // ✅ ถ้าเช็กแล้ว ข้าม
+    if(s.attendance[k]) return;
     
     rows.push({student_id:id, subject_id:scanSubjId, date:scanDate, status:manualMode});
     toMark.push(s);
-    console.log('✅ เพิ่มใน rows');
   });
-  
-  console.log('📦 rows ที่จะบันทึก:', rows.length, rows);
   
   if(!rows.length){
     window._pending.clear();
@@ -1513,25 +1502,28 @@ async function commitManual(){
     return banner('นักเรียนที่เลือกเช็กชื่อหมดแล้ว',true);
   }
   
-  const {error}=await sb.from('attendance').upsert(rows, {onConflict:'student_id,subject_id,date'});
-  
-  console.log('💾 บันทึก Supabase:', error ? '❌ '+error.message : '✅ สำเร็จ');
+  // 🔥 เพิ่ม .select() เพื่อดึงข้อมูลกลับมา
+  const {data, error}=await sb.from('attendance')
+    .upsert(rows, {onConflict:'student_id,subject_id,date'})
+    .select(); // ✅ เพิ่มบรรทัดนี้
   
   if(error) return banner('บันทึกไม่สำเร็จ: '+error.message,true);
   
-  // อัปเดต memory
-toMark.forEach(s=>{
-  s.attendance[k]=manualMode;
-  
-  // 🔥 บันทึก log
-  logAction({
-    type:'att',
-    name:s.name,
-    status:manualMode,
-    subject: DB.subjects.find(x=>x.id===scanSubjId)?.name || '',
-    classroom: DB.classrooms.find(x=>x.id===s.classroomId)?.name || ''
+  // ✅ อัปเดต memory ด้วยข้อมูลจาก DB (มี id + timestamp ที่แท้จริง)
+  toMark.forEach((s, i)=>{
+    s.attendance[k]=manualMode;
+    
+    // 🔥 ถ้ามี id กลับมา เก็บไว้ใน log
+    if(data && data[i]) {
+      logAction({
+        type:'att',
+        name:s.name,
+        status:manualMode,
+        subject: DB.subjects.find(x=>x.id===scanSubjId)?.name || '',
+        classroom: DB.classrooms.find(x=>x.id===s.classroomId)?.name || ''
+      });
+    }
   });
-});
   
   window._pending.clear();
   render();
@@ -1540,23 +1532,72 @@ toMark.forEach(s=>{
 }
   
 async function commitWork(){
-  const ctx=scanCtx();if(!ctx||!window._pending.size)return;
+  const ctx=scanCtx();
+  if(!ctx||!window._pending.size)return;
+  
   const a=DB.assignments.find(x=>x.id===scanAssignId);
   if(!a)return banner('ยังไม่ได้เลือกชิ้นงาน',true);
+  
   const ids=[...window._pending];
   if(!confirm(`บันทึกการส่งงาน "${a.name}" ให้นักเรียน ${ids.length} คน?\n(บันทึกแล้วจะล็อก แตะซ้ำเพื่อยกเลิกได้)`))return;
-  const now=new Date().toISOString();const rows=[],marked=[];
-  ids.forEach(id=>{const s=DB.students.find(x=>x.id===id);if(!s)return;
-    a.scores=a.scores||{};a.scores[id]=a.scores[id]||{};
+  
+  const now=new Date().toISOString();
+  const rows=[], marked=[];
+  
+  ids.forEach(id=>{
+    const s=DB.students.find(x=>x.id===id);
+    if(!s)return;
+    
+    a.scores=a.scores||{};
+    a.scores[id]=a.scores[id]||{};
+    
+    // ✅ ถ้าส่งแล้ว ข้าม
     if(a.scores[id].submittedAt)return;
+    
     const c=a.scores[id];
-    rows.push({assignment_id:a.id,student_id:id,value:(c.value==null||c.value==='')?null:+c.value,note:c.note||null,submitted_at:now});
-    marked.push(s);});
-  if(!rows.length){window._pending.clear();render();return;}
-  const {error}=await sb.from('scores').upsert(rows,{onConflict:'assignment_id,student_id'});
+    rows.push({
+      assignment_id:a.id,
+      student_id:id,
+      value:(c.value==null||c.value==='')?null:+c.value,
+      note:c.note||null,
+      submitted_at:now
+    });
+    marked.push(s);
+  });
+  
+  if(!rows.length){
+    window._pending.clear();
+    render();
+    return;
+  }
+  
+  // 🔥 เพิ่ม .select() เพื่อดึงข้อมูลกลับมา
+  const {data, error}=await sb.from('scores')
+    .upsert(rows,{onConflict:'assignment_id,student_id'})
+    .select(); // ✅ เพิ่มบรรทัดนี้
+  
   if(error)return banner('บันทึกไม่สำเร็จ: '+error.message,true);
-  marked.forEach(s=>{a.scores[s.id].submittedAt=now;logAction({type:'work',name:s.name,classroom:ctx.cls.name,subject:ctx.sub?.name||'',detail:'รับงาน: '+a.name});});
-  window._pending.clear();render();soundDone();banner(`บันทึกการส่งงาน ${marked.length} คนเรียบร้อย`);
+  
+  // ✅ อัปเดต memory ด้วยข้อมูลจาก DB
+  marked.forEach((s, i)=>{
+    a.scores[s.id].submittedAt=now;
+    
+    // 🔥 ถ้ามี id กลับมา เก็บ log
+    if(data && data[i]) {
+      logAction({
+        type:'work',
+        name:s.name,
+        classroom:ctx.cls.name,
+        subject:ctx.sub?.name||'',
+        detail:'รับงาน: '+a.name
+      });
+    }
+  });
+  
+  window._pending.clear();
+  render();
+  soundDone();
+  banner(`บันทึกการส่งงาน ${marked.length} คนเรียบร้อย`);
 }  
 /* ============================================================
    RANKING
