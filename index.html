@@ -225,6 +225,221 @@ body{font-size:clamp(15px,1.4vw,17px);padding-bottom:110px}
 #main {
   padding: 0;
 }
+
+.nav {
+  position: sticky;
+  top: 0;
+  background: rgba(251, 249, 245, 0.8);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid #E7E1D7;
+  z-index: 100;
+}
+
+.nav-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.nav-logo {
+  font-family: 'Fraunces', serif;
+  font-size: 1.5rem;
+  color: #C4612F;
+  margin: 0;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.nav-user {
+  color: #5C635D;
+  font-size: 0.9rem;
+}
+
+.main-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+.hero {
+  padding: 4rem 0;
+  text-align: center;
+}
+
+.hero-content {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.eyebrow {
+  display: inline-block;
+  background: #F2E3D6;
+  color: #C4612F;
+  padding: 0.375rem 1rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 1.5rem;
+}
+
+.hero-title {
+  font-family: 'Fraunces', serif;
+  font-size: 2.5rem;
+  font-weight: 400;
+  color: #1F2421;
+  margin: 0 0 1rem;
+  letter-spacing: -0.02em;
+}
+
+.hero-title em {
+  color: #C4612F;
+  font-style: italic;
+}
+
+.hero-subtitle {
+  font-size: 1.125rem;
+  color: #5C635D;
+  margin: 0;
+}
+
+.section {
+  padding: 3rem 0;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.section-title {
+  font-family: 'Fraunces', serif;
+  font-size: 1.75rem;
+  font-weight: 400;
+  color: #1F2421;
+  margin: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.card {
+  background: #FFFFFF;
+  border: 1px solid #E7E1D7;
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(31, 36, 33, 0.08);
+}
+
+.card-title {
+  font-family: 'Fraunces', serif;
+  font-size: 1.25rem;
+  color: #1F2421;
+  margin: 0 0 0.5rem;
+}
+
+.card-subtitle {
+  color: #5C635D;
+  font-size: 0.875rem;
+  margin: 0 0 1.5rem;
+}
+
+.card-footer {
+  display: flex;
+  gap: 1rem;
+  border-top: 1px solid #E7E1D7;
+  padding-top: 1rem;
+}
+
+.empty-state {
+  text-align: center;
+  color: #5C635D;
+  padding: 3rem;
+  background: #FBF9F5;
+  border-radius: 12px;
+  border: 1px dashed #E7E1D7;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(31, 36, 33, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+}
+
+.modal {
+  background: #FFFFFF;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 20px 40px rgba(31, 36, 33, 0.15);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #E7E1D7;
+}
+
+.modal-header h3 {
+  font-family: 'Fraunces', serif;
+  font-size: 1.5rem;
+  margin: 0;
+  color: #1F2421;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  color: #5C635D;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  width: 2rem;
+  height: 2rem;
+}
+
+.modal-close:hover {
+  color: #1F2421;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-top: 1px solid #E7E1D7;
+}
+  
 </style>
 </head>
 <body>
@@ -681,6 +896,131 @@ function enterApp(){
   
   renderApp();
 }
+function renderApp() {
+  const container = document.getElementById('app');
+  container.innerHTML = `
+    <div class="page">
+      <nav class="nav">
+        <div class="nav-content">
+          <h1 class="nav-logo">Classroom</h1>
+          <div class="nav-actions">
+            <span class="nav-user">${state.user.name}</span>
+            <button class="btn-text" onclick="logout()">ออกจากระบบ</button>
+          </div>
+        </div>
+      </nav>
+
+      <main class="main-content">
+        <div class="hero">
+          <div class="hero-content">
+            <span class="eyebrow">ระบบจัดการห้องเรียน</span>
+            <h1 class="hero-title">ยินดีต้อนรับ <em>${state.user.name}</em></h1>
+            <p class="hero-subtitle">จัดการห้องเรียนและนักเรียนของคุณได้อย่างมีประสิทธิภาพ</p>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-header">
+            <h2 class="section-title">ห้องเรียนของฉัน</h2>
+            <button class="btn-primary" onclick="showCreateClassroomModal()">
+              <span>+ สร้างห้องเรียน</span>
+            </button>
+          </div>
+          <div id="classroomList" class="grid"></div>
+        </div>
+      </main>
+    </div>
+
+    <div id="modalContainer"></div>
+  `;
+
+  renderClassrooms();
+}
+
+function renderClassrooms() {
+  const container = document.getElementById('classroomList');
+  if (!state.classrooms.length) {
+    container.innerHTML = '<div class="empty-state">ยังไม่มีห้องเรียน กดปุ่มสร้างห้องเรียนเพื่อเริ่มต้น</div>';
+    return;
+  }
+
+  container.innerHTML = state.classrooms.map(classroom => `
+    <div class="card">
+      <h3 class="card-title">${classroom.name}</h3>
+      <p class="card-subtitle">รหัส: ${classroom.code}</p>
+      <div class="card-footer">
+        <button class="btn-text" onclick="viewClassroom('${classroom.id}')">ดูรายละเอียด</button>
+        <button class="btn-text" onclick="deleteClassroom('${classroom.id}')">ลบ</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function logout() {
+  state.user = null;
+  state.classrooms = [];
+  state.currentView = 'login';
+  renderLogin();
+}
+
+function showCreateClassroomModal() {
+  const modal = document.getElementById('modalContainer');
+  modal.innerHTML = `
+    <div class="modal-backdrop" onclick="closeModal()">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <h3>สร้างห้องเรียนใหม่</h3>
+          <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label">ชื่อห้องเรียน</label>
+          <input type="text" id="classroomName" class="form-input" placeholder="เช่น วิทยาศาสตร์ ม.1/1">
+        </div>
+        <div class="modal-footer">
+          <button class="btn-text" onclick="closeModal()">ยกเลิก</button>
+          <button class="btn-primary" onclick="createClassroom()">สร้าง</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function closeModal() {
+  document.getElementById('modalContainer').innerHTML = '';
+}
+
+function createClassroom() {
+  const name = document.getElementById('classroomName').value.trim();
+  if (!name) {
+    alert('กรุณากรอกชื่อห้องเรียน');
+    return;
+  }
+
+  const classroom = {
+    id: Date.now().toString(),
+    name,
+    code: Math.random().toString(36).substring(2, 8).toUpperCase(),
+    teacher: state.user.username,
+    students: []
+  };
+
+  state.classrooms.push(classroom);
+  saveToLocalStorage();
+  closeModal();
+  renderClassrooms();
+}
+
+function deleteClassroom(id) {
+  if (!confirm('ต้องการลบห้องเรียนนี้?')) return;
+  state.classrooms = state.classrooms.filter(c => c.id !== id);
+  saveToLocalStorage();
+  renderClassrooms();
+}
+
+function viewClassroom(id) {
+  alert('ฟีเจอร์ดูรายละเอียดห้องเรียนยังไม่พร้อม');
+}
+  
 function openStudentPortal(){document.getElementById('tabbar').style.display='none';
   document.querySelector('.topbar').style.display='';
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
