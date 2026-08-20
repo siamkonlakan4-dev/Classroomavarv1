@@ -422,7 +422,18 @@ document.getElementById('popupBg').addEventListener('click',()=>document.getElem
    ============================================================ */
 function studentSession(stu){return{id:'stu_'+stu.id,role:'student',name:stu.name,studentId:stu.id,username:stu.code};}
 function persistSession(id){try{sessionStorage.setItem('cr_uid',id);}catch(e){}}
- 
+
+// ฟังก์ชันออกจากระบบ
+async function logout(){
+  await sb.auth.signOut();
+  session=null;
+  CURRENT_USER=null;
+  show('landing');
+  hide('app');
+  hide('topbar');
+  banner('ออกจากระบบแล้ว');
+}  
+  
 async function doLogin(){
   const u=val('loginUser'),p=val('loginPass');
   if(!u||!p)return banner('กรอกชื่อผู้ใช้และรหัสผ่าน',true);
@@ -477,6 +488,8 @@ async function afterAuth(user){
   banner('ไม่พบบัญชีนี้ในระบบ',true);
 }
 async function loadFromSupabase(){
+  console.log('🔄 Loading from Supabase...');
+  
   const [rSet,rProf,rCls,rStu,rSubj,rSubCls,rAsg,rScore,rAtt,rLog,rCT,rItems,rSItems]=await Promise.all([
     sb.from('settings').select('*'),
     sb.from('profiles').select('*'),
@@ -492,64 +505,132 @@ async function loadFromSupabase(){
     sb.from('avatar_items').select('*'),
     sb.from('student_items').select('*'),
   ]);
-  [rSet,rProf,rCls,rStu,rSubj,rSubCls,rAsg,rScore,rAtt,rLog].forEach(r=>{if(r.error)console.warn('load error:',r.error.message);});
+  
+  [rSet,rProf,rCls,rStu,rSubj,rSubCls,rAsg,rScore,rAtt,rLog].forEach(r=>{
+    if(r.error)console.warn('❌ Load error:',r.error.message);
+  });
 
-  DB=blankDB();DB.users=[];DB.classrooms=[];DB.students=[];DB.subjects=[];DB.assignments=[];DB.logs=[];
-  DB.shopItems=[];DB.studentItems=[];
+  console.log('📊 Attendance records loaded:', rAtt.data?.length || 0);
+  console.log('📊 Score records loaded:', rScore.data?.length || 0);
+
+  DB=blankDB();
+  DB.users=[];
+  DB.classrooms=[];
+  DB.students=[];
+  DB.subjects=[];
+  DB.assignments=[];
+  DB.logs=[];
+  DB.shopItems=[];
+  DB.studentItems=[];
   
   // shop
-  DB.shopItems=(rItems.data||[]).map(i=>({id:i.id,type:i.type,value:i.value,price:i.price||0,name:i.name||''}));
-  DB.studentItems=(rSItems.data||[]).map(x=>({student_id:x.student_id,item_id:x.item_id}));
+  DB.shopItems=(rItems.data||[]).map(i=>({
+    id:i.id,
+    type:i.type,
+    value:i.value,
+    price:i.price||0,
+    name:i.name||''
+  }));
+  
+  DB.studentItems=(rSItems.data||[]).map(x=>({
+    student_id:x.student_id,
+    item_id:x.item_id
+  }));
 
   // settings
   const st=(rSet.data||[])[0];
-  if(st){settingsRowId=st.id;DB.systemName=st.system_name||'ระบบเช็กชื่อห้องเรียน';DB.logo=st.logo||'';DB.school=st.school||'';DB.weights=st.weights||{during:70,final:30};}
+  if(st){
+    settingsRowId=st.id;
+    DB.systemName=st.system_name||'ระบบเช็กชื่อห้องเรียน';
+    DB.logo=st.logo||'';
+    DB.school=st.school||'';
+    DB.weights=st.weights||{during:70,final:30};
+  }
 
   // users
-  DB.users=(rProf.data||[]).map(p=>({id:p.id,username:p.username,name:p.name,role:p.role,active:p.active}));
+  DB.users=(rProf.data||[]).map(p=>({
+    id:p.id,
+    username:p.username,
+    name:p.name,
+    role:p.role,
+    active:p.active
+  }));
 
   // classrooms
   const ctMap={};
-  (rCT.data||[]).forEach(r=>{(ctMap[r.classroom_id]=ctMap[r.classroom_id]||[]).push(r.teacher_id);});
-  DB.classrooms=(rCls.data||[]).map(c=>({id:c.id,ownerId:c.owner_id,name:c.name,level:c.level||'',year:c.year||'',teacherIds:ctMap[c.id]||[]}));
+  (rCT.data||[]).forEach(r=>{
+    (ctMap[r.classroom_id]=ctMap[r.classroom_id]||[]).push(r.teacher_id);
+  });
+  
+  DB.classrooms=(rCls.data||[]).map(c=>({
+    id:c.id,
+    ownerId:c.owner_id,
+    name:c.name,
+    level:c.level||'',
+    year:c.year||'',
+    teacherIds:ctMap[c.id]||[]
+  }));
 
   // subject -> classroomIds
   const scMap={};
-  (rSubCls.data||[]).forEach(r=>{(scMap[r.subject_id]=scMap[r.subject_id]||[]).push(r.classroom_id);});
-  DB.subjects=(rSubj.data||[]).map(s=>({id:s.id,ownerId:s.owner_id,code:s.code||'',name:s.name,credits:s.credits||0,term:s.term||'year',year:s.year||'',schedule:s.schedule||[],classroomIds:scMap[s.id]||[]}));
-
-  // 🔥 attendance -> student.attendance["subjId|date"]
-  const attMap={};
-  (rAtt.data||[]).forEach(a=>{
-    const dateKey = a.date.split('T')[0];  // ✅ ตัด timestamp
-    (attMap[a.student_id]=attMap[a.student_id]||{})[a.subject_id+'|'+dateKey]=a.status;
+  (rSubCls.data||[]).forEach(r=>{
+    (scMap[r.subject_id]=scMap[r.subject_id]||[]).push(r.classroom_id);
   });
   
-  // 🔥 สร้าง DB.students พร้อมใส่ attendance
-  DB.students=(rStu.data||[]).map(s=>({
+  DB.subjects=(rSubj.data||[]).map(s=>({
     id:s.id,
-    classroomId:s.classroom_id,
-    number:s.number||'',
-    name:s.name,
+    ownerId:s.owner_id,
     code:s.code||'',
-    birthdate:s.birthdate||'',
-    points:s.points||0,
-    avatar:s.avatar||defaultAvatar(s.code||s.name),
-    mustChange:s.must_change,
-    pw:'',
-    user_id:s.user_id,
-    attendance:attMap[s.id]||{}  // ✅ ใส่ข้อมูลจาก DB
+    name:s.name,
+    credits:s.credits||0,
+    term:s.term||'year',
+    year:s.year||'',
+    schedule:s.schedule||[],
+    classroomIds:scMap[s.id]||[]
   }));
 
-  // 🔥 scores -> assignment.scores[studentId]
+  // 🔥 attendance -> map ข้อมูลเข้า student object
+  const attMap={};
+  (rAtt.data||[]).forEach(a=>{
+    const dateKey = a.date.split('T')[0];
+    const key = a.subject_id+'|'+dateKey;
+    if(!attMap[a.student_id]) attMap[a.student_id]={};
+    attMap[a.student_id][key]=a.status;
+  });
+  
+  console.log('✅ Attendance mapped for students:', Object.keys(attMap).length);
+
+  // 🔥 สร้าง students พร้อม attendance
+  DB.students=(rStu.data||[]).map(s=>{
+    const studentAtt = attMap[s.id]||{};
+    return {
+      id:s.id,
+      classroomId:s.classroom_id,
+      number:s.number||'',
+      name:s.name,
+      code:s.code||'',
+      birthdate:s.birthdate||'',
+      points:s.points||0,
+      avatar:s.avatar||defaultAvatar(s.code||s.name),
+      mustChange:s.must_change,
+      pw:'',
+      user_id:s.user_id,
+      attendance:studentAtt
+    };
+  });
+
+  // 🔥 scores -> map เข้า assignment object
   const scoreMap={};
   (rScore.data||[]).forEach(x=>{
-    (scoreMap[x.assignment_id]=scoreMap[x.assignment_id]||{})[x.student_id]={
+    if(!scoreMap[x.assignment_id]) scoreMap[x.assignment_id]={};
+    scoreMap[x.assignment_id][x.student_id]={
       value:x.value,
       note:x.note||'',
       submittedAt:x.submitted_at
     };
   });
+  
+  console.log('✅ Scores mapped for assignments:', Object.keys(scoreMap).length);
   
   DB.assignments=(rAsg.data||[]).map(a=>({
     id:a.id,
@@ -559,11 +640,28 @@ async function loadFromSupabase(){
     fullScore:a.full_score||10,
     due:a.due?a.due.slice(0,16):'',
     createdAt:a.created_at||today(),
-    scores:scoreMap[a.id]||{}  // ✅ ใส่ข้อมูลจาก DB
+    scores:scoreMap[a.id]||{}
   }));
 
   // logs
-  DB.logs=(rLog.data||[]).map(l=>({id:l.id,at:l.at,by:l.by_id,byName:l.by_name,type:l.type,detail:l.detail,classroom:l.classroom,subject:l.subject,status:l.status,name:l.name}));
+  DB.logs=(rLog.data||[]).map(l=>({
+    id:l.id,
+    at:l.at,
+    by:l.by_id,
+    byName:l.by_name,
+    type:l.type,
+    detail:l.detail,
+    classroom:l.classroom,
+    subject:l.subject,
+    status:l.status,
+    name:l.name
+  }));
+  
+  console.log('✅ Load complete:', {
+    students: DB.students.length,
+    assignments: DB.assignments.length,
+    logs: DB.logs.length
+  });
 }
   
 
