@@ -295,7 +295,7 @@ const sb=window.supabase.createClient(SB_URL,SB_ANON,{auth:{persistSession:true}
 let DB=load();
 let session=null;
 let settingsRowId=1;
-let CURRENT_USER = null;
+
 function blankDB(){return{
   systemName:'ระบบเช็กชื่อห้องเรียน',logo:'',school:'โรงเรียนตัวอย่าง',
   weights:{during:70,final:30},
@@ -364,8 +364,8 @@ function thDateTime(iso){const d=new Date(iso);return`${thDate(iso)} ${String(d.
 function logAction(type, detail, classroom = '', subject = '', status = '', name = '') {
   const log = {
     at: new Date().toISOString(),
-    by_id: CURRENT_USER.id,        // ✅ แก้เป็น CURRENT_USER
-    by_name: CURRENT_USER.name,    // ✅ แก้เป็น CURRENT_USER
+    by_id: session.id,        // ✅ เปลี่ยนจาก CURRENT_USER เป็น session
+    by_name: session.name,    // ✅ เปลี่ยนจาก CURRENT_USER เป็น session
     type, detail, classroom, subject, status, name
   };
   DB.logs.unshift(log);
