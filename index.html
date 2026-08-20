@@ -423,7 +423,7 @@ async function doLogin(){
   banner('กำลังเข้าสู่ระบบ...');
   
   // ตรวจสอบว่าเป็นครู/แอดมิน หรือนักเรียน
-  const isStaff=user.includes('@') || isNaN(user);
+  const isStaff=user.includes('@') || user.includes('.') || isNaN(user);
   
   if(isStaff){
     // ============ LOGIN ครู/แอดมิน ============
@@ -470,13 +470,14 @@ async function doLogin(){
     });
     
     if(error){
+      console.error('RPC error:',error);
       beep(300,.2,'sawtooth');
       return banner('รหัสนักเรียนหรือรหัสผ่านไม่ถูกต้อง',true);
     }
     
     if(!data||data.length===0){
       beep(300,.2,'sawtooth');
-      return banner('ไม่สามารถเข้าสู่ระบบได้',true);
+      return banner('ไม่พบข้อมูลนักเรียน หรือรหัสผ่านไม่ถูกต้อง',true);
     }
     
     const student=data[0];
@@ -514,9 +515,9 @@ async function doLogin(){
     const {data:stu}=await sb.from('students').select('*').order('name');
     const {data:usr}=await sb.from('profiles').select('*').order('name');
     
-    classrooms=cls||[];
-    students=stu||[];
-    users=usr||[];
+    DB.classrooms=cls||[];
+    DB.students=stu||[];
+    DB.users=usr||[];
   }catch(e){
     console.error('Load error:',e);
   }
@@ -534,33 +535,42 @@ function showForceChange(){const stu=DB.students.find(s=>s.id===session.studentI
   document.getElementById('fcPass').value='';document.getElementById('fcPass2').value='';
   document.getElementById('forceScreen').classList.remove('hidden');}
 async function submitForceChange(){
-  const stu=DB.students.find(s=>s.id===session.studentId);
   const p1=val('fcPass'),p2=val('fcPass2');
-  if(p1.length<4)return banner('รหัสผ่านอย่างน้อย 4 ตัวอักษร',true);
+  if(p1.length<6)return banner('รหัสผ่านอย่างน้อย 6 ตัวอักษร',true);
   if(p1!==p2)return banner('รหัสผ่านยืนยันไม่ตรงกัน',true);
-  if(stu&&validBirth(stu.birthdate)&&p1===stu.birthdate)return banner('ห้ามตั้งรหัสเป็นวันเกิด เลือกรหัสใหม่',true);
+  
+  // ใช้ข้อมูลจาก tempStudentData
+  const stuData=window.tempStudentData;
+  if(!stuData)return banner('ข้อมูลไม่ครบ กรุณาเข้าสู่ระบบใหม่',true);
 
-  // ✅ สำหรับนักเรียน → เก็บ hash ลง password_hash
   banner('กำลังตั้งรหัสผ่าน...');
   const hash=await sha256(p1);
   
-  const {data,error}=await sb.rpc('set_student_password',{
-    stu_id:session.studentId,
-    new_password:hash
-  });
+  const {error}=await sb.from('students').update({
+    password_hash:hash,
+    temp_pw:null,
+    must_change:false
+  }).eq('id',stuData.id);
   
-  if(error||!data.success){
+  if(error){
     beep(300,.2,'sawtooth');
-    return banner('ตั้งรหัสไม่สำเร็จ กรุณาลองใหม่',true);
+    return banner('ตั้งรหัสไม่สำเร็จ: '+error.message,true);
   }
   
-  if(stu)stu.mustChange=false;
+  // ตั้ง session
+  session={
+    id:'stu_'+stuData.id,
+    role:'student',
+    name:stuData.name,
+    studentId:stuData.id,
+    username:stuData.code
+  };
+  
   document.getElementById('forceScreen').classList.add('hidden');
   soundOK();
   banner('ตั้งรหัสผ่านเรียบร้อย');
   enterApp();
 }
-
 
   
 const TAB_DEF={
