@@ -331,7 +331,7 @@ async function sha256(message) {
 
 async function verifyPw(pw,stored){if(!stored)return false;if(stored.startsWith('plain$'))return pw===stored.slice(6);return(await sha256(pw))===stored;}
 /* รหัสนักเรียนต้องไม่ซ้ำ (คีย์หลัก) */
-function codeExists(code,exceptId){if(!code)return false;return DB.students.some(s=>String(s.code||'')===String(code)&&s.id!==exceptId);}
+function codeExists(code,exceptId){if(!code)return false;return DB.myStudents.some(s=>String(s.code||'')===String(code)&&s.id!==exceptId);}
 
 /* ---------- ROLE / ACCESS HELPERS ---------- */
 const isAdmin=()=>session?.role==='admin';
@@ -339,14 +339,14 @@ const isTeacher=()=>session?.role==='teacher';
 const isStudent=()=>session?.role==='student';
 const isStaff=()=>session?.role==='admin'||session?.role==='teacher';
 const userById=id=>DB.users.find(u=>u.id===id);
-function myClassrooms(){return isAdmin()?DB.classrooms.slice():DB.classrooms.filter(c=>c.ownerId===session.id||(c.teacherIds||[]).includes(session.id));}
+function myClassrooms(){return isAdmin()?DB.myClassrooms.slice():DB.myClassrooms.filter(c=>c.ownerId===session.id||(c.teacherIds||[]).includes(session.id));}
 function canSeeClass(cid){const c=clsById(cid);return c&&(isAdmin()||c.ownerId===session.id||(c.teacherIds||[]).includes(session.id));}
 function mySubjects(){const ids=myClassrooms().map(c=>c.id);return DB.subjects.filter(s=>(s.classroomIds||[]).some(x=>ids.includes(x)));}
 
 /* ---------- DATA HELPERS ---------- */
-const clsById=id=>DB.classrooms.find(c=>c.id===id);
+const clsById=id=>DB.myClassrooms.find(c=>c.id===id);
 const subjById=id=>DB.subjects.find(s=>s.id===id);
-const studentsOf=cid=>DB.students.filter(s=>s.classroomId===cid).sort((a,b)=>Number(a.number)-Number(b.number));
+const studentsOf=cid=>DB.myStudents.filter(s=>s.classroomId===cid).sort((a,b)=>Number(a.number)-Number(b.number));
 const subjectsOf=cid=>DB.subjects.filter(s=>(s.classroomIds||[]).includes(cid));
 const subjAssign=id=>DB.assignments.filter(a=>a.subjectId===id);
 let activeClassId=null;
@@ -511,18 +511,34 @@ async function doLogin(){
     };
   }
   
-  // โหลดข้อมูลจาก Supabase
-  try{
-    const {data:cls}=await sb.from('classrooms').select('*').order('name');
-    const {data:stu}=await sb.from('students').select('*').order('name');
-    const {data:usr}=await sb.from('profiles').select('*').order('name');
-    
-    DB.classrooms=cls||[];
-    DB.students=stu||[];
-    DB.users=usr||[];
-  }catch(e){
-    console.error('Load error:',e);
-  }
+// โหลดข้อมูลจาก Supabase
+try{
+  const {data:cls}=await sb.from('classrooms').select('*').order('name');
+  const {data:stu}=await sb.from('students').select('*').order('name');
+  const {data:usr}=await sb.from('profiles').select('*').order('name');
+  
+  // เพิ่มบรรทัดเหล่านี้
+  const {data:ct}=await sb.from('classroom_teachers').select('*');
+  const {data:sub}=await sb.from('subjects').select('*').order('name');
+  const {data:sc}=await sb.from('subject_classrooms').select('*');
+  const {data:att}=await sb.from('attendance').select('*');
+  const {data:scr}=await sb.from('scores').select('*');
+  const {data:asg}=await sb.from('assignments').select('*');
+  const {data:pl}=await sb.from('point_logs').select('*');
+  
+  DB.myClassrooms=cls||[];
+  DB.myStudents=stu||[];
+  DB.users=usr||[];
+  DB.classroom_teachers=ct||[];  // เพิ่ม
+  DB.subjects=sub||[];           // เพิ่ม
+  DB.subject_classrooms=sc||[];  // เพิ่ม
+  DB.attendance=att||[];         // เพิ่ม
+  DB.scores=scr||[];             // เพิ่ม
+  DB.assignments=asg||[];        // เพิ่ม
+  DB.point_logs=pl||[];          // เพิ่ม
+}catch(e){
+  console.error('Load error:',e);
+}
   
   soundOK();
   banner('เข้าสู่ระบบสำเร็จ');
@@ -530,7 +546,7 @@ async function doLogin(){
 }
   
 /* ---------- FORCE PASSWORD CHANGE (นักเรียน) ---------- */
-function showForceChange(){const stu=DB.students.find(s=>s.id===session.studentId);
+function showForceChange(){const stu=DB.myStudents.find(s=>s.id===session.studentId);
   document.getElementById('loginScreen').classList.add('hidden');
   document.querySelector('.topbar').style.display='none';document.getElementById('tabbar').style.display='none';
   document.getElementById('fcName').textContent=`สวัสดี ${stu?.name||''} · กรุณาตั้งรหัสผ่านส่วนตัวก่อนใช้งาน`;
@@ -584,8 +600,8 @@ async function submitForceChange(){
     const {data:stu}=await sb.from('students').select('*').order('name');
     const {data:usr}=await sb.from('profiles').select('*').order('name');
     
-    DB.classrooms=cls||[];
-    DB.students=stu||[];
+    DB.myClassrooms=cls||[];
+    DB.myStudents=stu||[];
     DB.users=usr||[];
   }catch(e){
     console.error('Load error:',e);
@@ -625,12 +641,31 @@ function renderTabbar(){const bar=document.getElementById('tabbar');const tabs=T
   if(!tabs.length){bar.style.display='none';return;}
   bar.style.display='';bar.innerHTML=tabs.map(t=>{const[lb,svg,grad]=TAB_DEF[t];return`<button class="tab ${t===currentTab?'active':''}" data-tab="${t}"><span class="ico" style="background:${grad}">${svg}</span><span class="tlb">${lb}</span></button>`;}).join('');
   bar.querySelectorAll('.tab').forEach(b=>b.onclick=()=>go(b.dataset.tab));}
-function enterApp(){document.getElementById('loginScreen').classList.add('hidden');
-  document.querySelector('.topbar').style.display='';ensureActiveClass();
-  if(isStudent()){const stu=DB.students.find(s=>s.id===session.studentId);
-    if(stu&&stu.mustChange){showForceChange();return;}
-    openStudentPortal();return;}
-  currentTab=(TABS_BY_ROLE[session.role][0])||'class';renderTabbar();go(currentTab);}
+function enterApp(){
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  
+  // กรองห้องที่ครูดูแล
+  if(session.role==='teacher'){
+    // หา classroom_id ที่ครูคนนี้ดูแล
+    const myClassroomIds = DB.classroom_teachers
+      .filter(ct => ct.teacher_id === session.id)
+      .map(ct => ct.classroom_id);
+    
+    // กรองข้อมูลเฉพาะห้องที่ดูแล
+    DB.myClassrooms = DB.myClassrooms.filter(c => myClassroomIds.includes(c.id));
+    DB.myStudents = DB.myStudents.filter(s => myClassroomIds.includes(s.classroom_id));
+    
+    console.log('ครูดูแล', DB.myClassrooms.length, 'ห้อง');
+    console.log('มีนักเรียน', DB.myStudents.length, 'คน');
+  }else{
+    // admin เห็นทุกอย่าง
+    DB.myClassrooms = DB.myClassrooms;
+    DB.myStudents = DB.myStudents;
+  }
+  
+  renderApp();
+}
 function openStudentPortal(){document.getElementById('tabbar').style.display='none';
   document.querySelector('.topbar').style.display='';
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -712,14 +747,14 @@ function renderUsers(){if(!isAdmin()){document.getElementById('page-users').inne
   let html=`<div class="listcard"><h3>👥 บัญชีเจ้าหน้าที่</h3><p class="meta" style="margin-top:4px">สร้างบัญชีผู้ดูแลและครู กำหนดสิทธิ์ ระงับ/ลบ หรือรีเซ็ตรหัสผ่าน</p></div>`;
   groups.forEach(([role,lb])=>{const list=DB.users.filter(u=>u.role===role);
     html+=`<div class="listcard"><h3><span class="pill ${role}">${lb}</span> <span class="meta">${list.length} บัญชี</span></h3>`;
-    html+=list.map(u=>{const nClass=u.role==='teacher'?DB.classrooms.filter(c=>c.ownerId===u.id).length:0;
+    html+=list.map(u=>{const nClass=u.role==='teacher'?DB.myClassrooms.filter(c=>c.ownerId===u.id).length:0;
       return `<div class="userrow"><div class="uava" style="background:${ROLECOLOR[u.role]}">${(u.name||'?').slice(0,1)}</div>
         <div style="flex:1;min-width:0"><div style="font-weight:600">${esc(u.name)} ${u.id===session.id?'<span class="meta">(คุณ)</span>':''}</div>
         <div class="meta">@${esc(u.username)}${nClass?' · 🏫 '+nClass+' ห้อง':''}</div></div>
         ${u.active?'':'<span class="pill off">ระงับ</span>'}
         <button class="btn sm gray" onclick="userModal('${u.id}')">แก้ไข</button></div>`;}).join('')||'<p class="meta">— ยังไม่มีบัญชี —</p>';
     html+=`</div>`;});
-  const nStu=DB.students.length,nReady=DB.students.filter(s=>s.code&&(s.pw||validBirth(s.birthdate))).length,nSet=DB.students.filter(s=>s.pw&&!s.mustChange).length;
+  const nStu=DB.myStudents.length,nReady=DB.myStudents.filter(s=>s.code&&(s.pw||validBirth(s.birthdate))).length,nSet=DB.myStudents.filter(s=>s.pw&&!s.mustChange).length;
   html+=`<div class="listcard"><h3><span class="pill student">นักเรียน</span> เข้าระบบอัตโนมัติ</h3>
     <p class="meta" style="margin-top:4px">ไม่ต้องสร้างบัญชีให้นักเรียน นักเรียนเข้าด้วย <b>รหัสนักเรียน</b> และครั้งแรกใช้ <b>วันเกิด</b> เป็นรหัสผ่าน จากนั้นระบบบังคับให้ตั้งรหัสส่วนตัวใหม่ หากลืมให้ครูประจำวิชารีเซ็ตในหน้าจัดการนักเรียน</p>
     <div class="meta" style="margin-top:8px">นักเรียนทั้งหมด <b>${nStu}</b> คน · ตั้งรหัสส่วนตัวแล้ว <b>${nSet}</b> คน · พร้อมเข้าระบบ <b>${nReady}</b> คน${nStu-nReady>0?` · <span style="color:var(--orange)">ยังขาดข้อมูล ${nStu-nReady} คน</span>`:''}</div></div>`;
@@ -795,7 +830,7 @@ async function bulkDeleteStudents(){
   if(!confirm(`ลบนักเรียน ${ids.length} คนที่เลือก?\nข้อมูลคะแนนและการเช็กชื่อของนักเรียนเหล่านี้จะถูกลบด้วย`))return;
   const {error}=await sb.from('students').delete().in('id',ids);
   if(error)return banner('ลบไม่สำเร็จ: '+error.message,true);
-  DB.students=DB.students.filter(x=>!stuSel.has(x.id));
+  DB.myStudents=DB.myStudents.filter(x=>!stuSel.has(x.id));
   logAction({type:'student',detail:`ลบนักเรียน ${ids.length} คน`});
   stuSel.clear();stuSelMode=false;render();banner(`ลบนักเรียน ${ids.length} คนแล้ว`);
 }
@@ -860,7 +895,7 @@ async function saveClassroom(id){
     const {data,error}=await sb.from('classrooms').insert({name:d.name,level:d.level,year:d.year,owner_id:owner}).select().single();
     if(error)return banner('บันทึกไม่สำเร็จ: '+error.message,true);
     cid=data.id;
-    DB.classrooms.push({id:cid,ownerId:owner,name:data.name,level:data.level||'',year:data.year||'',teacherIds});
+    DB.myClassrooms.push({id:cid,ownerId:owner,name:data.name,level:data.level||'',year:data.year||'',teacherIds});
     activeClassId=cid;wsOpen=cid;wsTab='students';
   }
   if(isAdmin()){
@@ -890,7 +925,7 @@ function pwStatusHtml(s){
   return`<span class="pill warnpw">ยังไม่ตั้ง · ใช้วันเกิดเข้าครั้งแรก</span>`;
 }
 function studentModal(id){if(!activeCls())return banner('เลือกชั้นเรียนก่อน',true);
-  window._curEditId=id||'';const s=id?DB.students.find(x=>x.id===id):null;const a=s?.avatar||defaultAvatar(Math.random()+'');window._tmpAvatar=a;
+  window._curEditId=id||'';const s=id?DB.myStudents.find(x=>x.id===id):null;const a=s?.avatar||defaultAvatar(Math.random()+'');window._tmpAvatar=a;
   const pwBox=s?`<div class="listcard" style="box-shadow:none;border:1px solid var(--sep);padding:13px;margin-bottom:14px">
       <div style="font-weight:600;margin-bottom:4px">🔑 รหัสผ่านนักเรียน</div>
       <div style="margin-bottom:8px">${pwStatusHtml(s)}</div>
@@ -941,7 +976,7 @@ async function delUser(id){const u=userById(id);if(u.id===session.id)return bann
   logAction({type:'user',detail:'ลบบัญชี '+u.username});closeModal();render();banner('ลบบัญชีแล้ว');
 }
 async function resetStuToBirth(id){
-  const s=DB.students.find(x=>x.id===id);if(!s)return;
+  const s=DB.myStudents.find(x=>x.id===id);if(!s)return;
   if(!validBirth(s.birthdate))return banner('นักเรียนยังไม่มีวันเกิด — กรอกวันเกิดก่อนรีเซ็ต',true);
   
   if(!confirm(`รีเซ็ตรหัสผ่านของ "${s.name}" กลับเป็นวันเกิด (${fmtBirth(s.birthdate)})?\nนักเรียนจะถูกบังคับให้ตั้งรหัสใหม่ตอนเข้าระบบครั้งถัดไป`))return;
@@ -967,7 +1002,7 @@ async function resetStuToBirth(id){
   studentModal(id);
 }
 async function setStuTempPw(id){
-  const s=DB.students.find(x=>x.id===id);
+  const s=DB.myStudents.find(x=>x.id===id);
   if(!s) return;
   
   const tmp=prompt(`กำหนดรหัสชั่วคราวให้ "${s.name}" (อย่างน้อย 6 ตัวอักษร)\nนักเรียนจะถูกบังคับให้ตั้งรหัสใหม่หลังเข้าระบบ`);
@@ -1018,7 +1053,7 @@ function importModal(){if(!activeCls())return banner('เลือกชั้�
 async function doImport(){
   if(!activeClassId)return banner('เลือกชั้นเรียนก่อน',true);
   const lines=val('csvIn').trim().split(/\r?\n/).filter(Boolean);
-  const seen=new Set(DB.students.map(s=>String(s.code||'')).filter(Boolean));
+  const seen=new Set(DB.myStudents.map(s=>String(s.code||'')).filter(Boolean));
   const queue=[];let dup=0,bad=0,noCode=0;
   lines.forEach(line=>{
     const cols=line.split(',').map(x=>x?.trim());
@@ -1045,7 +1080,7 @@ async function doImport(){
       body:{code:r.code,name:r.name,birthdate:r.birthdate,classroom_id:activeClassId,number:r.number}});
     if(res.error||!res.data?.ok){fail++;failNames.push(r.name);continue;}
     const c=res.data.student;
-    DB.students.push({id:c.id,classroomId:c.classroom_id,number:c.number||'',name:c.name,code:c.code||'',birthdate:c.birthdate||'',points:0,avatar:defaultAvatar(c.code||c.name),mustChange:true,pw:'',user_id:c.user_id,attendance:{}});
+    DB.myStudents.push({id:c.id,classroomId:c.classroom_id,number:c.number||'',name:c.name,code:c.code||'',birthdate:c.birthdate||'',points:0,avatar:defaultAvatar(c.code||c.name),mustChange:true,pw:'',user_id:c.user_id,attendance:{}});
     ok++;
   }
   if(ok)logAction({type:'student',detail:`นำเข้า CSV ${ok} คน`});
@@ -1056,7 +1091,7 @@ async function doImport(){
 async function saveStudent(id){
   if(!isAdmin())return banner('เฉพาะผู้ดูแลระบบ',true);
   if(!activeClassId)return banner('เลือกชั้นเรียนก่อน',true);
-  const s=id?DB.students.find(x=>x.id===id):null;
+  const s=id?DB.myStudents.find(x=>x.id===id):null;
   const number=val('m_no'),name=val('m_name'),code=val('m_code'),birth=val('m_birth');
   const points=+val('m_pts')||0;const avatar=window._tmpAvatar||defaultAvatar(code||name);
   if(!name)return banner('กรอกชื่อ-นามสกุล',true);
@@ -1084,7 +1119,7 @@ async function saveStudent(id){
     const c=res.data.student;
     // อัปเดตแต้ม/อวตารที่ครูตั้งไว้ (clever-function ตั้ง points=0 ให้)
     if(points||avatar){await sb.from('students').update({points,avatar}).eq('id',c.id);}
-    DB.students.push({id:c.id,classroomId:c.classroom_id,number:c.number||'',name:c.name,
+    DB.myStudents.push({id:c.id,classroomId:c.classroom_id,number:c.number||'',name:c.name,
       code:c.code||'',birthdate:c.birthdate||'',points,avatar,
       mustChange:true,pw:'',user_id:c.user_id,attendance:{}});
     logAction({type:'student',detail:'เพิ่มนักเรียน '+name});
@@ -1094,11 +1129,11 @@ async function saveStudent(id){
 
 async function delStudent(id){
   if(!isAdmin())return banner('เฉพาะผู้ดูแลระบบ',true);
-  const s=DB.students.find(x=>x.id===id);if(!s)return;
+  const s=DB.myStudents.find(x=>x.id===id);if(!s)return;
   if(!confirm(`ลบนักเรียน "${s.name}"?\nข้อมูลคะแนนและการเช็กชื่อของนักเรียนคนนี้จะถูกลบด้วย`))return;
   const {error}=await sb.from('students').delete().eq('id',id);
   if(error)return banner('ลบไม่สำเร็จ: '+error.message,true);
-  DB.students=DB.students.filter(x=>x.id!==id);
+  DB.myStudents=DB.myStudents.filter(x=>x.id!==id);
   logAction({type:'student',detail:'ลบนักเรียน '+s.name});
   closeModal();render();banner('ลบนักเรียนแล้ว');
 }
@@ -1163,8 +1198,8 @@ async function delSubject(id){
 let randState={clsId:null,pool:[],picked:[],removeMode:true,spinning:false};
 
 // ปรับ randClassList ให้ตรงกับ helper กรองห้องตามสิทธิ์ ถ้ามี (เช่น myClasses())
-function randClassList(){return (DB.classrooms||[]).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','th'));}
-function randStudentsOf(clsId){return (DB.students||[]).filter(s=>s.classroomId===clsId).sort((a,b)=>(+a.number||0)-(+b.number||0));}
+function randClassList(){return (DB.myClassrooms||[]).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','th'));}
+function randStudentsOf(clsId){return (DB.myStudents||[]).filter(s=>s.classroomId===clsId).sort((a,b)=>(+a.number||0)-(+b.number||0));}
 
 function randCardHTML(s,big){return `<div class="avatar" style="margin:0 auto ${big?'14':'8'}px">${avatarSVG(s.avatar,big?110:54)}</div><div style="font-size:${big?'26':'18'}px;font-weight:700">${esc(s.name)}</div><div class="meta">เลขที่ ${s.number}</div>`;}
 
@@ -1179,7 +1214,7 @@ function doRandomPick(){
   let ticks=0;const total=14;
   const spin=setInterval(()=>{
     const rid=randState.pool[Math.floor(Math.random()*randState.pool.length)];
-    const s=DB.students.find(x=>x.id===rid);
+    const s=DB.myStudents.find(x=>x.id===rid);
     if(disp&&s)disp.innerHTML=randCardHTML(s,true);
     if(++ticks>=total){
       clearInterval(spin);
@@ -1199,7 +1234,7 @@ function renderRandom(){
   const cls=randClassList();
   const clsName=clsById(randState.clsId)?.name||'—';
   const total=randStudentsOf(randState.clsId).length;
-  const last=randState.picked[0]?DB.students.find(x=>x.id===randState.picked[0]):null;
+  const last=randState.picked[0]?DB.myStudents.find(x=>x.id===randState.picked[0]):null;
   const done=randState.removeMode&&!randState.pool.length&&total>0;
   ov.innerHTML=`<div class="rand-box">
     <div class="row" style="justify-content:space-between;align-items:center"><h3 style="margin:0">🎲 สุ่มเรียกชื่อ</h3><button class="btn gray sm" onclick="closeRandom()">✕ ปิด</button></div>
@@ -1213,7 +1248,7 @@ function renderRandom(){
     <div id="randResult" class="rand-result">${last?randCardHTML(last,true):'<div class="meta" style="padding:30px 0">กดปุ่มเพื่อเริ่มสุ่ม</div>'}</div>
     <button class="btn ${done?'gray':''}" style="width:100%;margin-top:12px;font-size:18px;padding:14px" ${done?'disabled':''} onclick="doRandomPick()">${done?'✅ ครบทุกคนแล้ว':'🎲 สุ่ม'}</button>
     ${done?`<button class="btn gray" style="width:100%;margin-top:8px" onclick="randSelectCls(randState.clsId)">🔄 เริ่มรอบใหม่</button>`:''}
-    ${randState.picked.length?`<div style="margin-top:14px"><div class="fl">ประวัติการสุ่ม (ล่าสุดก่อน)</div>${randState.picked.map((id,i)=>{const s=DB.students.find(x=>x.id===id);return s?`<div class="logrow"><span class="meta" style="width:24px">${randState.picked.length-i}.</span><div style="flex:1"><b>${esc(s.name)}</b> <span class="meta">เลขที่ ${s.number}</span></div></div>`:'';}).join('')}</div>`:''}
+    ${randState.picked.length?`<div style="margin-top:14px"><div class="fl">ประวัติการสุ่ม (ล่าสุดก่อน)</div>${randState.picked.map((id,i)=>{const s=DB.myStudents.find(x=>x.id===id);return s?`<div class="logrow"><span class="meta" style="width:24px">${randState.picked.length-i}.</span><div style="flex:1"><b>${esc(s.name)}</b> <span class="meta">เลขที่ ${s.number}</span></div></div>`:'';}).join('')}</div>`:''}
   </div>`;
 }
 /* ---------- ASSIGNMENT ---------- */
@@ -1454,7 +1489,7 @@ function renderScan(){setTopActions('');const el=document.getElementById('page-s
     <div class="listcard"><h3>🕒 ประวัติล่าสุด</h3>${recent.length?recent.map(l=>`<div class="logrow"><span class="ld" style="background:${l.status?ATTCOLOR[l.status]:'var(--blue)'}"></span><div style="flex:1"><b>${esc(l.name)}</b><div class="meta">${esc(l.subject||'')} · ${esc(l.detail||'')}</div></div><span class="meta">${thDateTime(l.at).split(' ').slice(-1)[0]}</span></div>`).join(''):'<p class="meta">ยังไม่มีรายการ</p>'}</div>`;}
 
 async function undoAtt(id){const ctx=scanCtx();if(!ctx)return;
-  const s=DB.students.find(x=>x.id===id);if(!s)return;
+  const s=DB.myStudents.find(x=>x.id===id);if(!s)return;
   const k=attKey(scanSubjId,scanDate);const cur=s.attendance?.[k];if(!cur)return;
   if(!confirm(`ลบการเช็กชื่อของ "${s.name}" (${ATTLABEL[cur]}) วันที่ ${scanDate}?`))return;
   const {error}=await sb.from('attendance').delete().match({student_id:id,subject_id:scanSubjId,date:scanDate});
@@ -1462,7 +1497,7 @@ async function undoAtt(id){const ctx=scanCtx();if(!ctx)return;
   delete s.attendance[k];
   logAction({type:'att',name:s.name,classroom:ctx.cls.name,subject:ctx.sub?.name||'',detail:'ยกเลิกการเช็กชื่อ'});
   render();banner('ยกเลิกการเช็กชื่อแล้ว');}
-async function undoWork(aid,sid){const a=DB.assignments.find(x=>x.id===aid);if(!a)return;const s=DB.students.find(x=>x.id===sid);
+async function undoWork(aid,sid){const a=DB.assignments.find(x=>x.id===aid);if(!a)return;const s=DB.myStudents.find(x=>x.id===sid);
   if(!confirm(`ยกเลิกการรับงานของ "${s?.name||''}"?`))return;
   const c=a.scores[sid]||{};
   const {error}=await sb.from('scores').upsert(
@@ -1481,7 +1516,7 @@ async function commitManual(){const ctx=scanCtx();if(!ctx||!window._pending.size
   const ids=[...window._pending];
   if(!confirm(`บันทึกสถานะ "${ATTLABEL[manualMode]}" ให้นักเรียน ${ids.length} คน?\n(เมื่อบันทึกแล้วจะล็อก เช็กซ้ำไม่ได้)`))return;
   const k=attKey(scanSubjId,scanDate);const rows=[],marked=[];
-  ids.forEach(id=>{const s=DB.students.find(x=>x.id===id);if(!s)return;s.attendance=s.attendance||{};if(s.attendance[k])return;
+  ids.forEach(id=>{const s=DB.myStudents.find(x=>x.id===id);if(!s)return;s.attendance=s.attendance||{};if(s.attendance[k])return;
     rows.push({student_id:id,subject_id:scanSubjId,date:scanDate,status:manualMode});marked.push(s);});
   if(!rows.length){window._pending.clear();render();return;}
   const {error}=await sb.from('attendance').upsert(rows,{onConflict:'student_id,subject_id,date'});
@@ -1496,7 +1531,7 @@ async function commitWork(){
   const ids=[...window._pending];
   if(!confirm(`บันทึกการส่งงาน "${a.name}" ให้นักเรียน ${ids.length} คน?\n(บันทึกแล้วจะล็อก แตะซ้ำเพื่อยกเลิกได้)`))return;
   const now=new Date().toISOString();const rows=[],marked=[];
-  ids.forEach(id=>{const s=DB.students.find(x=>x.id===id);if(!s)return;
+  ids.forEach(id=>{const s=DB.myStudents.find(x=>x.id===id);if(!s)return;
     a.scores=a.scores||{};a.scores[id]=a.scores[id]||{};
     if(a.scores[id].submittedAt)return;
     const c=a.scores[id];
@@ -1901,7 +1936,7 @@ function printCards(){document.body.classList.add('print-cards');window.print();
    STUDENT PORTAL
    ============================================================ */
 function renderPortal(){const el=document.getElementById('page-portal');
-  const stu=session?.studentId?DB.students.find(s=>s.id===session.studentId):null;
+  const stu=session?.studentId?DB.myStudents.find(s=>s.id===session.studentId):null;
   setTopActions('');
   if(!stu){el.innerHTML=`<div class="listcard" style="text-align:center"><div style="font-size:50px;margin-bottom:6px">🧑‍🎓</div><h3 style="justify-content:center">ไม่พบข้อมูลนักเรียน</h3><p class="meta" style="margin-bottom:14px">ข้อมูลอาจถูกลบ โปรดติดต่อครูประจำชั้น</p><button class="btn gray" onclick="logout()">ออกจากระบบ</button></div>`;return;}
   const cls=clsById(stu.classroomId);const g=gradeOf(stu);const at=attStats(stu);const classStuds=studentsOf(stu.classroomId);
@@ -1948,7 +1983,7 @@ function renderPortal(){const el=document.getElementById('page-portal');
     ${shopCardHTML(stu)}
     <div class="listcard"><h3>🔑 รหัสผ่านของฉัน</h3><label class="fl" style="margin-top:6px">เปลี่ยนรหัสผ่าน</label><input id="stu_pass" type="password" placeholder="รหัสใหม่ (อย่างน้อย 4 ตัว)"><button class="btn sm" onclick="studentChangePass()">บันทึกรหัสผ่าน</button><p class="meta" style="margin-top:8px">หากลืมรหัส ติดต่อครูประจำวิชาเพื่อรีเซ็ต</p></div>`;}
 async function studentChangePass(){
-  const stu=DB.students.find(s=>s.id===session.studentId);if(!stu)return;
+  const stu=DB.myStudents.find(s=>s.id===session.studentId);if(!stu)return;
   const p=val('stu_pass');if(p.length<4)return banner('รหัสผ่านอย่างน้อย 4 ตัว',true);
   if(validBirth(stu.birthdate)&&p===stu.birthdate)return banner('ห้ามใช้วันเกิดเป็นรหัส',true);
   const {error}=await sb.auth.updateUser({password:p});
@@ -2025,12 +2060,12 @@ function shopCardHTML(stu){
 async function buyItem(itemId){
   const res=await sb.functions.invoke('shop-buy',{body:{item_id:itemId}});
   if(res.error||!res.data?.ok)return banner('ซื้อไม่สำเร็จ: '+(res.data?.error||res.error?.message||''),true);
-  const stu=DB.students.find(s=>s.id===session.studentId);if(stu)stu.points=res.data.points;
+  const stu=DB.myStudents.find(s=>s.id===session.studentId);if(stu)stu.points=res.data.points;
   DB.studentItems=DB.studentItems||[];DB.studentItems.push({student_id:stu.id,item_id:itemId});
   soundOK();render();banner('ซื้อสำเร็จ! กด "ใส่" เพื่อใช้งาน');
 }
 async function equipItem(type,value){
-  const stu=DB.students.find(s=>s.id===session.studentId);if(!stu)return;
+  const stu=DB.myStudents.find(s=>s.id===session.studentId);if(!stu)return;
   const a={...(stu.avatar||defaultAvatar(stu.code||stu.name))};
   if(type==='color')a.color=PALETTE[value]||a.color;else a[type]=value;
   const {error}=await sb.from('students').update({avatar:a}).eq('id',stu.id);
@@ -2040,7 +2075,7 @@ async function equipItem(type,value){
 
 /* ครู/แอดมินให้แต้ม */
 function pointsModal(id){
-  const s=DB.students.find(x=>x.id===id);if(!s)return;
+  const s=DB.myStudents.find(x=>x.id===id);if(!s)return;
   openModal(`<h2>⭐ ให้แต้ม: ${esc(s.name)}</h2>
     <div class="meta" style="margin-bottom:12px">แต้มปัจจุบัน <b>${s.points||0}</b></div>
     <label class="fl">เหตุผล</label>
@@ -2060,7 +2095,7 @@ async function givePoints(id,delta){
   const reason=val('pt_reason')||'manual';
   const res=await sb.functions.invoke('award-points',{body:{student_id:id,delta,reason}});
   if(res.error||!res.data?.ok)return banner('ไม่สำเร็จ: '+(res.data?.error||res.error?.message||''),true);
-  const s=DB.students.find(x=>x.id===id);if(s)s.points=res.data.points;
+  const s=DB.myStudents.find(x=>x.id===id);if(s)s.points=res.data.points;
   logAction({type:'points',name:s?.name,detail:(res.data.applied>=0?'+':'')+res.data.applied+' แต้ม · '+reason});
   soundOK();closeModal();render();banner('อัปเดตแต้มแล้ว · '+(s?.name||''));
 }
@@ -2155,7 +2190,7 @@ function resetAll(){if(!isAdmin())return;
 function dl(name,content,type){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function exportCSV(){const rows=[['ห้องเรียน','เลขที่','ชื่อ-นามสกุล','รหัสนักเรียน','วันเกิด','แต้ม','สถานะรหัสผ่าน']];
-  const scope=isAdmin()?DB.classrooms:myClassrooms();
+  const scope=isAdmin()?DB.myClassrooms:myClassrooms();
   scope.forEach(c=>studentsOf(c.id).forEach(s=>{
     const st=s.pw?(s.mustChange?'รหัสชั่วคราว':'ตั้งแล้ว'):'ยังไม่ตั้ง';
     rows.push([c.name,s.number,s.name,s.code||'',s.birthdate||'',s.points||0,st]);}));
