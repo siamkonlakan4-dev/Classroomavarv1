@@ -409,23 +409,7 @@ document.getElementById('popupBg').addEventListener('click',()=>document.getElem
    ============================================================ */
 function studentSession(stu){return{id:'stu_'+stu.id,role:'student',name:stu.name,studentId:stu.id,username:stu.code};}
 function persistSession(id){try{sessionStorage.setItem('cr_uid',id);}catch(e){}}
-
-async function login(){
-  const email = prompt('อีเมล:');
-  const password = prompt('รหัสผ่าน:');
-  
-  if(!email || !password) return;
-  
-  const {data, error} = await sb.auth.signInWithPassword({email, password});
-  
-  if(error){
-    alert('เข้าสู่ระบบไม่สำเร็จ: ' + error.message);
-  } else {
-    alert('เข้าสู่ระบบสำเร็จ');
-    location.reload();
-  }
-}
-  
+ 
 async function doLogin(){
   const u=val('loginUser'),p=val('loginPass');
   if(!u||!p)return banner('กรอกชื่อผู้ใช้และรหัสผ่าน',true);
