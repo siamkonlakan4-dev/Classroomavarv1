@@ -474,6 +474,7 @@ async function loadFromSupabase(){
 
   DB=blankDB();DB.users=[];DB.classrooms=[];DB.students=[];DB.subjects=[];DB.assignments=[];DB.logs=[];
   DB.shopItems=[];DB.studentItems=[];
+  
   // shop
   DB.shopItems=(rItems.data||[]).map(i=>({id:i.id,type:i.type,value:i.value,price:i.price||0,name:i.name||''}));
   DB.studentItems=(rSItems.data||[]).map(x=>({student_id:x.student_id,item_id:x.item_id}));
@@ -495,12 +496,29 @@ async function loadFromSupabase(){
   (rSubCls.data||[]).forEach(r=>{(scMap[r.subject_id]=scMap[r.subject_id]||[]).push(r.classroom_id);});
   DB.subjects=(rSubj.data||[]).map(s=>({id:s.id,ownerId:s.owner_id,code:s.code||'',name:s.name,credits:s.credits||0,term:s.term||'year',year:s.year||'',schedule:s.schedule||[],classroomIds:scMap[s.id]||[]}));
 
-// attendance -> student.attendance["subjId|date"]
+  // attendance -> student.attendance["subjId|date"]
   const attMap={};
   (rAtt.data||[]).forEach(a=>{
-    const dateKey = a.date.split('T')[0];  // ✅ ตัดเอาแค่ YYYY-MM-DD
+    const dateKey = a.date.split('T')[0];  // ✅ ตัด timestamp
     (attMap[a.student_id]=attMap[a.student_id]||{})[a.subject_id+'|'+dateKey]=a.status;
   });
+  
+  // 🔥 สร้าง DB.students พร้อมใส่ attendance
+  DB.students=(rStu.data||[]).map(s=>({
+    id:s.id,
+    classroomId:s.classroom_id,
+    number:s.number||'',
+    name:s.name,
+    code:s.code||'',
+    birthdate:s.birthdate||'',
+    points:s.points||0,
+    avatar:s.avatar||defaultAvatar(s.code||s.name),
+    mustChange:s.must_change,
+    pw:'',
+    user_id:s.user_id,
+    attendance:attMap[s.id]||{}
+  }));
+
   // scores -> assignment.scores[studentId]
   const scoreMap={};
   (rScore.data||[]).forEach(x=>{(scoreMap[x.assignment_id]=scoreMap[x.assignment_id]||{})[x.student_id]={value:x.value,note:x.note||'',submittedAt:x.submitted_at};});
@@ -509,18 +527,7 @@ async function loadFromSupabase(){
   // logs
   DB.logs=(rLog.data||[]).map(l=>({id:l.id,at:l.at,by:l.by_id,byName:l.by_name,type:l.type,detail:l.detail,classroom:l.classroom,subject:l.subject,status:l.status,name:l.name}));
 }
-
-async function logout(){
-  try{await sb.auth.signOut();}catch(e){}
-  session=null;closeModal();stopScanner();
-  document.querySelector('.topbar').style.display='none';
-  document.getElementById('tabbar').style.display='none';
-  document.getElementById('forceScreen').classList.add('hidden');
-  document.getElementById('loginScreen').classList.remove('hidden');
-  document.getElementById('loginUser').value='';
-  document.getElementById('loginPass').value='';
-  renderLoginBrand();
-}
+  
 
 function renderLoginBrand(){
   const t=document.getElementById('loginTitle');
