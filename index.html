@@ -1300,7 +1300,7 @@ async function applyMark(stu,ctx,isScan){
   if(scanMode==='att'){
     const k=attKey(scanSubjId,scanDate);
     
-    // 🔥 เช็คใน Supabase ก่อน (เหมือนรับงาน)
+    // 🔥 เช็คใน Supabase ก่อน
     const {data:existing} = await sb.from('attendance')
       .select('status')
       .eq('student_id', stu.id)
@@ -1321,7 +1321,7 @@ async function applyMark(stu,ctx,isScan){
     
     if(error) return banner('บันทึกไม่สำเร็จ: '+error.message,true);
     
-    // 🔥 อัปเดต memory หลังบันทึกสำเร็จ
+    // อัปเดต memory
     stu.attendance=stu.attendance||{};
     stu.attendance[k]=manualMode;
     
@@ -1330,9 +1330,35 @@ async function applyMark(stu,ctx,isScan){
     popupSuccess('เช็กชื่อสำเร็จ',[`<b>${esc(stu.name)}</b>`, `สถานะ: <b>${ATTLABEL[manualMode]}</b>`]);
     if(!isScan) render();
   }
-  else{
-    // รับงาน (เหมือนเดิม)
-    ...
+  else if(scanMode==='work'){
+    // 🔥 รับงาน (โค้ดเดิมที่ทำงานอยู่แล้ว)
+    const a=DB.assignments.find(x=>x.id===scanAssignId);
+    if(!a) return banner('ไม่พบงาน',true);
+    
+    // เช็คว่าส่งแล้วหรือยัง
+    if(a.scores?.[stu.id]?.submittedAt){
+      beep(300,.2,'sawtooth');
+      return banner(`${stu.name} ส่งงานนี้แล้ว`,true);
+    }
+    
+    // บันทึกลง Supabase
+    const now=new Date().toISOString();
+    const {error}=await sb.from('scores').upsert(
+      {assignment_id:a.id, student_id:stu.id, submitted_at:now},
+      {onConflict:'assignment_id,student_id'}
+    );
+    
+    if(error) return banner('บันทึกไม่สำเร็จ: '+error.message,true);
+    
+    // อัปเดต memory
+    if(!a.scores) a.scores={};
+    if(!a.scores[stu.id]) a.scores[stu.id]={};
+    a.scores[stu.id].submittedAt=now;
+    
+    logAction({type:'work', name:stu.name, assignment:a.name});
+    soundOK();
+    popupSuccess('รับงานสำเร็จ',[`<b>${esc(stu.name)}</b>`, `งาน: <b>${esc(a.name)}</b>`]);
+    if(!isScan) render();
   }
 }
 
