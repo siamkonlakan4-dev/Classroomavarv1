@@ -501,13 +501,13 @@ async function doLogin(){
       return;
     }
     
-    // ตั้ง session นักเรียน
-    session={
-      id:'stu_'+student.id,
+    // ตั้ง session (เอา 'stu_' ออก)
+      session={
+      id:stuData.id,              // แก้จาก 'stu_'+stuData.id
       role:'student',
-      name:student.name,
-      studentId:student.id,
-      username:studentCode
+      name:stuData.name,
+      studentId:stuData.id,
+      username:stuData.code
     };
   }
   
