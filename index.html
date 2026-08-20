@@ -1299,18 +1299,37 @@ function stopScanner(){
 async function applyMark(stu,ctx,isScan){
   if(scanMode==='att'){
     const k=attKey(scanSubjId,scanDate);
-    stu.attendance=stu.attendance||{};
-    if(stu.attendance[k]){beep(300,.2,'sawtooth');return banner(`${stu.name} เช็กชื่อแล้ว (${ATTLABEL[stu.attendance[k]]})`,true);}
+    
+    // 🔥 เช็คใน DB ก่อน (ไม่ใช่แค่ memory)
+    const {data:existing} = await sb.from('attendance')
+      .select('status')
+      .eq('student_id', stu.id)
+      .eq('subject_id', scanSubjId)
+      .eq('date', scanDate)
+      .maybeSingle();
+    
+    if(existing){
+      beep(300,.2,'sawtooth');
+      return banner(`${stu.name} เช็กชื่อแล้ว (${ATTLABEL[existing.status]})`,true);
+    }
+    
+    // บันทึกและรอให้เสร็จ
     const {error}=await sb.from('attendance').upsert(
       {student_id:stu.id,subject_id:scanSubjId,date:scanDate,status:manualMode},
       {onConflict:'student_id,subject_id,date'});
+    
     if(error)return banner('บันทึกไม่สำเร็จ: '+error.message,true);
+    
+    // อัปเดต memory หลังบันทึกสำเร็จ
+    stu.attendance=stu.attendance||{};
     stu.attendance[k]=manualMode;
+    
     logAction({type:'att',name:stu.name,classroom:ctx.cls.name,subject:ctx.sub?.name||'',status:manualMode,detail:ATTLABEL[manualMode]});
     soundOK();
     popupSuccess('เช็กชื่อสำเร็จ',[`<b>${esc(stu.name)}</b>`,`เลขที่ ${stu.number} · ${esc(ctx.cls.name)}`,`สถานะ: <b>${ATTLABEL[manualMode]}</b>`,`${esc(ctx.sub?.name||'')}`]);
     if(!isScan)render();
   }else{
+    // (รับงานเหมือนเดิม — ทำงานถูกต้องแล้ว)
     const a=DB.assignments.find(x=>x.id===scanAssignId);
     if(!a)return banner('ยังไม่ได้เลือกชิ้นงาน',true);
     a.scores=a.scores||{};a.scores[stu.id]=a.scores[stu.id]||{};
