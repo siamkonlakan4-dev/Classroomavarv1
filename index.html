@@ -361,24 +361,27 @@ function classLevelType(cls){const c=cls||activeCls();if(!c)return'primary';cons
 function termLabel(s){return(s.term==='1'||s.term==='2')?`ภาคเรียน ${s.term}/${s.year||''}`:`ปีการศึกษา ${s.year||''}`;}
 function thDate(iso){const d=new Date(iso);return`${d.getDate()} ${THMONTHS[d.getMonth()]} ${d.getFullYear()+543}`;}
 function thDateTime(iso){const d=new Date(iso);return`${thDate(iso)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}น.`;}
-async function logAction(obj){
+function logAction(type, detail, classroom = '', subject = '', status = '', name = '') {
   const log = {
     at: new Date().toISOString(),
-    by_id: currentUser?.id || null,
-    by_name: currentUser?.name || 'System',
-    type: obj.type,
-    detail: obj.detail || '',
-    classroom: obj.classroom || '',
-    subject: obj.subject || '',
-    status: obj.status || '',
-    name: obj.name || ''
+    by_id: CURRENT_USER.id,        // ✅ แก้เป็น CURRENT_USER
+    by_name: CURRENT_USER.name,    // ✅ แก้เป็น CURRENT_USER
+    type, detail, classroom, subject, status, name
   };
-  
-  // 🔥 บันทึกลง Supabase
-  await sb.from('logs').insert(log);
-  
-  // เพิ่มใน memory
   DB.logs.unshift(log);
+  sb.from('logs').insert({
+    by_id: log.by_id,
+    by_name: log.by_name,
+    type: log.type,
+    detail: log.detail,
+    classroom: log.classroom,
+    subject: log.subject,
+    status: log.status,
+    name: log.name
+  }).then(r => {
+    if (r.error) console.warn('❌ log insert error:', r.error.message);
+    else if (r.data && r.data[0]) log.id = r.data[0].id;
+  });
 }
   
 
