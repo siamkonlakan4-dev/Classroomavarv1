@@ -361,14 +361,24 @@ function classLevelType(cls){const c=cls||activeCls();if(!c)return'primary';cons
 function termLabel(s){return(s.term==='1'||s.term==='2')?`ภาคเรียน ${s.term}/${s.year||''}`:`ปีการศึกษา ${s.year||''}`;}
 function thDate(iso){const d=new Date(iso);return`${d.getDate()} ${THMONTHS[d.getMonth()]} ${d.getFullYear()+543}`;}
 function thDateTime(iso){const d=new Date(iso);return`${thDate(iso)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}น.`;}
-function logAction(o){
-  DB.logs.unshift({id:uid(),at:new Date().toISOString(),by:session?.id,byName:session?.name,...o});
-  if(DB.logs.length>500)DB.logs.length=500;
-  sb.from('logs').insert({
-    by_id:session?.id||null,by_name:session?.name||null,
-    type:o.type||null,detail:o.detail||null,classroom:o.classroom||null,
-    subject:o.subject||null,status:o.status||null,name:o.name||null
-  }).then(({error})=>{if(error)console.warn('log error:',error.message);});
+async function logAction(obj){
+  const log = {
+    at: new Date().toISOString(),
+    by_id: currentUser?.id || null,
+    by_name: currentUser?.name || 'System',
+    type: obj.type,
+    detail: obj.detail || '',
+    classroom: obj.classroom || '',
+    subject: obj.subject || '',
+    status: obj.status || '',
+    name: obj.name || ''
+  };
+  
+  // 🔥 บันทึกลง Supabase
+  await sb.from('logs').insert(log);
+  
+  // เพิ่มใน memory
+  DB.logs.unshift(log);
 }
   
 
@@ -485,11 +495,12 @@ async function loadFromSupabase(){
   (rSubCls.data||[]).forEach(r=>{(scMap[r.subject_id]=scMap[r.subject_id]||[]).push(r.classroom_id);});
   DB.subjects=(rSubj.data||[]).map(s=>({id:s.id,ownerId:s.owner_id,code:s.code||'',name:s.name,credits:s.credits||0,term:s.term||'year',year:s.year||'',schedule:s.schedule||[],classroomIds:scMap[s.id]||[]}));
 
-  // attendance -> student.attendance["subjId|date"]
+// attendance -> student.attendance["subjId|date"]
   const attMap={};
-  (rAtt.data||[]).forEach(a=>{(attMap[a.student_id]=attMap[a.student_id]||{})[a.subject_id+'|'+a.date]=a.status;});
-  DB.students=(rStu.data||[]).map(s=>({id:s.id,classroomId:s.classroom_id,number:s.number||'',name:s.name,code:s.code||'',birthdate:s.birthdate||'',points:s.points||0,avatar:s.avatar||defaultAvatar(s.code||s.name),mustChange:s.must_change,pw:'',user_id:s.user_id,attendance:attMap[s.id]||{}}));
-
+  (rAtt.data||[]).forEach(a=>{
+    const dateKey = a.date.split('T')[0];  // ✅ ตัดเอาแค่ YYYY-MM-DD
+    (attMap[a.student_id]=attMap[a.student_id]||{})[a.subject_id+'|'+dateKey]=a.status;
+  });
   // scores -> assignment.scores[studentId]
   const scoreMap={};
   (rScore.data||[]).forEach(x=>{(scoreMap[x.assignment_id]=scoreMap[x.assignment_id]||{})[x.student_id]={value:x.value,note:x.note||'',submittedAt:x.submitted_at};});
@@ -1497,10 +1508,18 @@ async function commitManual(){
   if(error) return banner('บันทึกไม่สำเร็จ: '+error.message,true);
   
   // อัปเดต memory
-  toMark.forEach(s=>{
-    s.attendance[k]=manualMode;
-    logAction({type:'att', name:s.name, status:manualMode});
+toMark.forEach(s=>{
+  s.attendance[k]=manualMode;
+  
+  // 🔥 บันทึก log
+  logAction({
+    type:'att',
+    name:s.name,
+    status:manualMode,
+    subject: DB.subjects.find(x=>x.id===scanSubjId)?.name || '',
+    classroom: DB.classrooms.find(x=>x.id===s.classroomId)?.name || ''
   });
+});
   
   window._pending.clear();
   render();
