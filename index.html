@@ -429,9 +429,9 @@ async function doLogin(){
 
   // หา email สำหรับ login
   let email;
-  if(u.includes('@')) email=u;                                  // กรอก email ตรง ๆ
-  else if(/^\d+$/.test(u)) email=`s${u}@students.local`;        // ตัวเลขล้วน = รหัสนักเรียน
-  else {                                                         // ไม่งั้นถือเป็น username ครู
+  if(u.includes('@')) email=u;
+  else if(/^\d+$/.test(u)) email=`s${u}@students.local`;
+  else {
     const {data,error}=await sb.rpc('email_for_username',{uname:u});
     if(error||!data){beep(300,.2,'sawtooth');return banner('ไม่พบชื่อผู้ใช้นี้',true);}
     email=data;
@@ -439,6 +439,8 @@ async function doLogin(){
 
   const {data:auth,error}=await sb.auth.signInWithPassword({email,password:p});
   if(error){beep(300,.2,'sawtooth');return banner('เข้าสู่ระบบไม่สำเร็จ ตรวจรหัสผ่าน',true);}
+  
+  // ✅ เพิ่มการโหลดข้อมูลหลัง login
   await afterAuth(auth.user);
 }
 
@@ -448,16 +450,31 @@ async function afterAuth(user){
   if(prof){
     if(!prof.active){await sb.auth.signOut();return banner('บัญชีถูกระงับ',true);}
     session={id:prof.id,role:prof.role,name:prof.name,username:prof.username,active:true};
-    CURRENT_USER = session; // ✅ เพิ่มบรรทัดนี้
-    banner('กำลังโหลดข้อมูล...');await loadFromSupabase();soundOK();enterApp();return;
+    CURRENT_USER = session;
+    
+    // ✅ โหลดข้อมูลทุกครั้งก่อนเข้าแอป
+    banner('กำลังโหลดข้อมูล...');
+    await loadFromSupabase();
+    soundOK();
+    enterApp();
+    return;
   }
+  
   const {data:stu}=await sb.from('students').select('*').eq('user_id',user.id).maybeSingle();
   if(stu){
     session={id:'stu_'+stu.id,role:'student',name:stu.name,studentId:stu.id,username:stu.code};
-    CURRENT_USER = session; // ✅ เพิ่มบรรทัดนี้
-    banner('กำลังโหลดข้อมูล...');await loadFromSupabase();soundOK();enterApp();return;
+    CURRENT_USER = session;
+    
+    // ✅ โหลดข้อมูลทุกครั้งก่อนเข้าแอป
+    banner('กำลังโหลดข้อมูล...');
+    await loadFromSupabase();
+    soundOK();
+    enterApp();
+    return;
   }
-  await sb.auth.signOut();banner('ไม่พบบัญชีนี้ในระบบ',true);
+  
+  await sb.auth.signOut();
+  banner('ไม่พบบัญชีนี้ในระบบ',true);
 }
 async function loadFromSupabase(){
   const [rSet,rProf,rCls,rStu,rSubj,rSubCls,rAsg,rScore,rAtt,rLog,rCT,rItems,rSItems]=await Promise.all([
@@ -501,7 +518,7 @@ async function loadFromSupabase(){
   (rSubCls.data||[]).forEach(r=>{(scMap[r.subject_id]=scMap[r.subject_id]||[]).push(r.classroom_id);});
   DB.subjects=(rSubj.data||[]).map(s=>({id:s.id,ownerId:s.owner_id,code:s.code||'',name:s.name,credits:s.credits||0,term:s.term||'year',year:s.year||'',schedule:s.schedule||[],classroomIds:scMap[s.id]||[]}));
 
-  // attendance -> student.attendance["subjId|date"]
+  // 🔥 attendance -> student.attendance["subjId|date"]
   const attMap={};
   (rAtt.data||[]).forEach(a=>{
     const dateKey = a.date.split('T')[0];  // ✅ ตัด timestamp
@@ -521,13 +538,29 @@ async function loadFromSupabase(){
     mustChange:s.must_change,
     pw:'',
     user_id:s.user_id,
-    attendance:attMap[s.id]||{}
+    attendance:attMap[s.id]||{}  // ✅ ใส่ข้อมูลจาก DB
   }));
 
-  // scores -> assignment.scores[studentId]
+  // 🔥 scores -> assignment.scores[studentId]
   const scoreMap={};
-  (rScore.data||[]).forEach(x=>{(scoreMap[x.assignment_id]=scoreMap[x.assignment_id]||{})[x.student_id]={value:x.value,note:x.note||'',submittedAt:x.submitted_at};});
-  DB.assignments=(rAsg.data||[]).map(a=>({id:a.id,subjectId:a.subject_id,name:a.name,type:a.type||'during',fullScore:a.full_score||10,due:a.due?a.due.slice(0,16):'',createdAt:a.created_at||today(),scores:scoreMap[a.id]||{}}));
+  (rScore.data||[]).forEach(x=>{
+    (scoreMap[x.assignment_id]=scoreMap[x.assignment_id]||{})[x.student_id]={
+      value:x.value,
+      note:x.note||'',
+      submittedAt:x.submitted_at
+    };
+  });
+  
+  DB.assignments=(rAsg.data||[]).map(a=>({
+    id:a.id,
+    subjectId:a.subject_id,
+    name:a.name,
+    type:a.type||'during',
+    fullScore:a.full_score||10,
+    due:a.due?a.due.slice(0,16):'',
+    createdAt:a.created_at||today(),
+    scores:scoreMap[a.id]||{}  // ✅ ใส่ข้อมูลจาก DB
+  }));
 
   // logs
   DB.logs=(rLog.data||[]).map(l=>({id:l.id,at:l.at,by:l.by_id,byName:l.by_name,type:l.type,detail:l.detail,classroom:l.classroom,subject:l.subject,status:l.status,name:l.name}));
