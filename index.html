@@ -537,13 +537,23 @@ function showForceChange(){const stu=DB.students.find(s=>s.id===session.studentI
   document.getElementById('fcPass').value='';document.getElementById('fcPass2').value='';
   document.getElementById('forceScreen').classList.remove('hidden');}
 async function submitForceChange(){
-  const p1=val('fcPass'),p2=val('fcPass2');
-  if(p1.length<6)return banner('รหัสผ่านอย่างน้อย 6 ตัวอักษร',true);
-  if(p1!==p2)return banner('รหัสผ่านยืนยันไม่ตรงกัน',true);
+  const p1=val('fcPass'), p2=val('fcPass2');
   
-  // ใช้ข้อมูลจาก tempStudentData
+  if(p1.length<6){
+    beep(300,.2,'sawtooth');
+    return banner('รหัสผ่านอย่างน้อย 6 ตัวอักษร',true);
+  }
+  
+  if(p1!==p2){
+    beep(300,.2,'sawtooth');
+    return banner('รหัสผ่านยืนยันไม่ตรงกัน',true);
+  }
+  
   const stuData=window.tempStudentData;
-  if(!stuData)return banner('ข้อมูลไม่ครบ กรุณาเข้าสู่ระบบใหม่',true);
+  if(!stuData){
+    beep(300,.2,'sawtooth');
+    return banner('ข้อมูลไม่ครบ กรุณาเข้าสู่ระบบใหม่',true);
+  }
 
   banner('กำลังตั้งรหัสผ่าน...');
   const hash=await sha256(p1);
@@ -568,9 +578,26 @@ async function submitForceChange(){
     username:stuData.code
   };
   
+  // โหลดข้อมูลจาก Supabase
+  try{
+    const {data:cls}=await sb.from('classrooms').select('*').order('name');
+    const {data:stu}=await sb.from('students').select('*').order('name');
+    const {data:usr}=await sb.from('profiles').select('*').order('name');
+    
+    DB.classrooms=cls||[];
+    DB.students=stu||[];
+    DB.users=usr||[];
+  }catch(e){
+    console.error('Load error:',e);
+  }
+  
+  // ซ่อนหน้าตั้งรหัส
   document.getElementById('forceScreen').classList.add('hidden');
+  
   soundOK();
   banner('ตั้งรหัสผ่านเรียบร้อย');
+  
+  // เข้าแอป
   enterApp();
 }
 
