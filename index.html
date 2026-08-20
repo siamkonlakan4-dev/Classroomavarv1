@@ -871,96 +871,29 @@ function renderTabbar(){const bar=document.getElementById('tabbar');const tabs=T
   if(!tabs.length){bar.style.display='none';return;}
   bar.style.display='';bar.innerHTML=tabs.map(t=>{const[lb,svg,grad]=TAB_DEF[t];return`<button class="tab ${t===currentTab?'active':''}" data-tab="${t}"><span class="ico" style="background:${grad}">${svg}</span><span class="tlb">${lb}</span></button>`;}).join('');
   bar.querySelectorAll('.tab').forEach(b=>b.onclick=()=>go(b.dataset.tab));}
-function enterApp(){
+async function enterApp(){
   document.getElementById('loginScreen').classList.add('hidden');
-  document.getElementById('app').classList.remove('hidden');
+  document.querySelector('.topbar').style.display='';
+  document.getElementById('tabbar').style.display='';
   
   // กรองห้องที่ครูดูแล
   if(session.role==='teacher'){
-    // หา classroom_id ที่ครูคนนี้ดูแล
     const myClassroomIds = DB.classroom_teachers
       .filter(ct => ct.teacher_id === session.id)
       .map(ct => ct.classroom_id);
     
-    // กรองข้อมูลเฉพาะห้องที่ดูแล
     DB.myClassrooms = DB.myClassrooms.filter(c => myClassroomIds.includes(c.id));
     DB.myStudents = DB.myStudents.filter(s => myClassroomIds.includes(s.classroom_id));
     
     console.log('ครูดูแล', DB.myClassrooms.length, 'ห้อง');
     console.log('มีนักเรียน', DB.myStudents.length, 'คน');
-  }else{
-    // admin เห็นทุกอย่าง
-    DB.myClassrooms = DB.myClassrooms;
-    DB.myStudents = DB.myStudents;
   }
   
-  renderApp();
-}
-function renderApp() {
-  const container = document.getElementById('app');
-  container.innerHTML = `
-    <div class="page">
-      <nav class="nav">
-        <div class="nav-content">
-          <h1 class="nav-logo">Classroom</h1>
-          <div class="nav-actions">
-            <span class="nav-user">${state.user.name}</span>
-            <button class="btn-text" onclick="logout()">ออกจากระบบ</button>
-          </div>
-        </div>
-      </nav>
-
-      <main class="main-content">
-        <div class="hero">
-          <div class="hero-content">
-            <span class="eyebrow">ระบบจัดการห้องเรียน</span>
-            <h1 class="hero-title">ยินดีต้อนรับ <em>${state.user.name}</em></h1>
-            <p class="hero-subtitle">จัดการห้องเรียนและนักเรียนของคุณได้อย่างมีประสิทธิภาพ</p>
-          </div>
-        </div>
-
-        <div class="section">
-          <div class="section-header">
-            <h2 class="section-title">ห้องเรียนของฉัน</h2>
-            <button class="btn-primary" onclick="showCreateClassroomModal()">
-              <span>+ สร้างห้องเรียน</span>
-            </button>
-          </div>
-          <div id="classroomList" class="grid"></div>
-        </div>
-      </main>
-    </div>
-
-    <div id="modalContainer"></div>
-  `;
-
-  renderClassrooms();
-}
-
-function renderClassrooms() {
-  const container = document.getElementById('classroomList');
-  if (!state.classrooms.length) {
-    container.innerHTML = '<div class="empty-state">ยังไม่มีห้องเรียน กดปุ่มสร้างห้องเรียนเพื่อเริ่มต้น</div>';
-    return;
-  }
-
-  container.innerHTML = state.classrooms.map(classroom => `
-    <div class="card">
-      <h3 class="card-title">${classroom.name}</h3>
-      <p class="card-subtitle">รหัส: ${classroom.code}</p>
-      <div class="card-footer">
-        <button class="btn-text" onclick="viewClassroom('${classroom.id}')">ดูรายละเอียด</button>
-        <button class="btn-text" onclick="deleteClassroom('${classroom.id}')">ลบ</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-function logout() {
-  state.user = null;
-  state.classrooms = [];
-  state.currentView = 'login';
-  renderLogin();
+  ensureActiveClass();
+  currentTab = isStudent() ? 'portal' : 'class';
+  
+  renderTabbar();
+  go(currentTab);
 }
 
 function showCreateClassroomModal() {
