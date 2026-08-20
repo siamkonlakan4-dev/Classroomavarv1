@@ -448,11 +448,13 @@ async function afterAuth(user){
   if(prof){
     if(!prof.active){await sb.auth.signOut();return banner('บัญชีถูกระงับ',true);}
     session={id:prof.id,role:prof.role,name:prof.name,username:prof.username,active:true};
+    CURRENT_USER = session; // ✅ เพิ่มบรรทัดนี้
     banner('กำลังโหลดข้อมูล...');await loadFromSupabase();soundOK();enterApp();return;
   }
   const {data:stu}=await sb.from('students').select('*').eq('user_id',user.id).maybeSingle();
   if(stu){
     session={id:'stu_'+stu.id,role:'student',name:stu.name,studentId:stu.id,username:stu.code};
+    CURRENT_USER = session; // ✅ เพิ่มบรรทัดนี้
     banner('กำลังโหลดข้อมูล...');await loadFromSupabase();soundOK();enterApp();return;
   }
   await sb.auth.signOut();banner('ไม่พบบัญชีนี้ในระบบ',true);
