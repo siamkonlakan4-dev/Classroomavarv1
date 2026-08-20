@@ -149,10 +149,3 @@ async function submitNewPw(){
   banner('✅ เปลี่ยนรหัสผ่านสำเร็จ');
   setTimeout(studentDash, 1000);
 }
-async function enterApp(){
-  document.getElementById('loginScreen').classList.add('hidden');
-  document.getElementById('app').classList.remove('hidden');
-  
-  await loadData();
-  render();
-}
