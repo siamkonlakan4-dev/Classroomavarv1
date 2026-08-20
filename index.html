@@ -1007,6 +1007,7 @@ async function saveStudent(id){
     if(error)return banner('บันทึกไม่สำเร็จ: '+error.message,true);
     Object.assign(s,{number,name,code,birthdate:birth,points,avatar});
     logAction({type:'student',detail:'แก้ไขนักเรียน '+name});
+    save();
     closeModal();render();banner('บันทึกนักเรียนแล้ว');
   }else{
     // เพิ่มนักเรียนใหม่ — ต้องมีวันเกิดเพื่อสร้างบัญชีเข้าระบบครั้งแรก
@@ -1022,6 +1023,7 @@ async function saveStudent(id){
       code:c.code||'',birthdate:c.birthdate||'',points,avatar,
       mustChange:true,pw:'',user_id:c.user_id,attendance:{}});
     logAction({type:'student',detail:'เพิ่มนักเรียน '+name});
+    save();
     closeModal();render();banner('เพิ่มนักเรียนแล้ว');
   }
 }
@@ -1091,6 +1093,7 @@ async function delSubject(id){
   DB.assignments=DB.assignments.filter(a=>a.subjectId!==id);
   DB.subjects=DB.subjects.filter(x=>x.id!==id);
   logAction({type:'subject',detail:'ลบรายวิชา'});
+  save();
   closeModal();render();banner('ลบแล้ว');
 }
 // ===== สุ่มเรียกชื่อ =====
@@ -1170,6 +1173,7 @@ async function saveAssign(id){
     if(error)return banner('บันทึกไม่สำเร็จ: '+error.message,true);
     DB.assignments.push({id:data.id,subjectId:data.subject_id,name:data.name,type:data.type||'during',fullScore:data.full_score||10,due:data.due?data.due.slice(0,16):'',createdAt:data.created_at||today(),scores:{}});
   }
+  save();
   closeModal();wsTab='assign';render();banner('บันทึกชิ้นงานแล้ว');
 }
 async function delAssign(id){
@@ -1232,6 +1236,7 @@ async function applyBulkGrade(aid,scope){
   if(error)return banner('บันทึกไม่สำเร็จ: '+error.message,true);
   logAction({type:'work',detail:`ให้คะแนน ${v} · ${a.name} · ${ids.length} คน`});
   soundOK();gradeModal(aid);banner(`ใส่คะแนน ${v} ให้ ${ids.length} คนแล้ว`);
+  save();
 }
 async function saveScoreRow(aid,sid){
   const a=DB.assignments.find(x=>x.id===aid);const c=a.scores[sid]||{};
@@ -1243,6 +1248,7 @@ async function saveScoreRow(aid,sid){
 async function setScore(aid,sid,v){
   const a=DB.assignments.find(x=>x.id===aid);a.scores=a.scores||{};a.scores[sid]=a.scores[sid]||{};
   a.scores[sid].value=v===''?null:+v;
+  save();
   await saveScoreRow(aid,sid);
 }
 async function setNote(aid,sid,v){
@@ -1421,7 +1427,7 @@ async function commitManual(){const ctx=scanCtx();if(!ctx||!window._pending.size
   const {error}=await sb.from('attendance').upsert(rows,{onConflict:'student_id,subject_id,date'});
   if(error)return banner('บันทึกไม่สำเร็จ: '+error.message,true);
   marked.forEach(s=>{s.attendance[k]=manualMode;logAction({type:'att',name:s.name,classroom:ctx.cls.name,subject:ctx.sub?.name||'',status:manualMode,detail:ATTLABEL[manualMode]});});
-  window._pending.clear();render();soundDone();banner(`บันทึก "${ATTLABEL[manualMode]}" ${marked.length} คนเรียบร้อย`);}
+  window._pending.clear();save();render();soundDone();banner(`บันทึก "${ATTLABEL[manualMode]}" ${marked.length} คนเรียบร้อย`);}
 
 async function commitWork(){
   const ctx=scanCtx();if(!ctx||!window._pending.size)return;
