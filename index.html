@@ -214,12 +214,27 @@ body{font-size:clamp(15px,1.4vw,17px);padding-bottom:110px}
 .rand-ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-start;justify-content:center;z-index:9999;padding:20px;overflow:auto}
 .rand-box{background:#fff;border-radius:20px;padding:20px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .rand-result{text-align:center;background:#f5f6fa;border-radius:16px;padding:20px;min-height:120px;display:flex;flex-direction:column;justify-content:center}
+.hidden {
+  display: none !important;
+}
 
+#app {
+  min-height: 100vh;
+}
+
+#main {
+  padding: 0;
+}
 </style>
 </head>
 <body>
 
 <div id="loginScreen" class="login-screen">
+  <!-- หลัง loginScreen -->
+  <div id="app" class="hidden">
+  <div id="tabbar"></div>
+  <div id="main"></div>
+  </div>
   <div class="login-card">
     <div class="login-logo" id="loginLogo">🎒</div>
     <h1 id="loginTitle">ระบบชั้นเรียน</h1>
