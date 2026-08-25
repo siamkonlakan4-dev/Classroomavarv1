@@ -490,8 +490,8 @@ async function afterAuth(user){
 async function loadFromSupabase(){
   console.log('🔄 Loading from Supabase...');
   
-  // ⚠️ แก้ตรงนี้ - ไม่โหลด attendance ทั้งหมดตอน init
-  const [rSet,rProf,rCls,rStu,rSubj,rSubCls,rAsg,rScore,rLog,rCT,rItems,rSItems]=await Promise.all([
+  // ✅ เพิ่ม rAtt กลับมา
+  const [rSet,rProf,rCls,rStu,rSubj,rSubCls,rAsg,rScore,rAtt,rLog,rCT,rItems,rSItems]=await Promise.all([
     sb.from('settings').select('*'),
     sb.from('profiles').select('*'),
     sb.from('classrooms').select('*'),
@@ -500,97 +500,16 @@ async function loadFromSupabase(){
     sb.from('subject_classrooms').select('*'),
     sb.from('assignments').select('*'),
     sb.from('scores').select('*'),
-    // ❌ ไม่โหลด attendance ทั้งหมด
-    // sb.from('attendance').select('*'),
+    sb.from('attendance').select('*'), // ✅ เพิ่มบรรทัดนี้กลับมา
     sb.from('logs').select('*').order('at',{ascending:false}).limit(200),
     sb.from('classroom_teachers').select('*'),
     sb.from('avatar_items').select('*'),
     sb.from('student_items').select('*'),
   ]);
   
-  [rSet,rProf,rCls,rStu,rSubj,rSubCls,rAsg,rScore,rLog].forEach(r=>{
-    if(r.error)console.warn('❌ Load error:',r.error.message);
-  });
-
-  console.log('📊 Score records loaded:', rScore.data?.length || 0);
-
-  DB=blankDB();
-  DB.users=[];
-  DB.classrooms=[];
-  DB.students=[];
-  DB.subjects=[];
-  DB.assignments=[];
-  DB.logs=[];
-  DB.shopItems=[];
-  DB.studentItems=[];
+  // ... (โค้ดเดิม)
   
-  // shop
-  DB.shopItems=(rItems.data||[]).map(i=>({
-    id:i.id,
-    type:i.type,
-    value:i.value,
-    price:i.price||0,
-    name:i.name||''
-  }));
-  
-  DB.studentItems=(rSItems.data||[]).map(x=>({
-    student_id:x.student_id,
-    item_id:x.item_id
-  }));
-
-  // settings
-  const st=(rSet.data||[])[0];
-  if(st){
-    settingsRowId=st.id;
-    DB.systemName=st.system_name||'ระบบเช็กชื่อห้องเรียน';
-    DB.logo=st.logo||'';
-    DB.school=st.school||'';
-    DB.weights=st.weights||{during:70,final:30};
-  }
-
-  // users
-  DB.users=(rProf.data||[]).map(p=>({
-    id:p.id,
-    username:p.username,
-    name:p.name,
-    role:p.role,
-    active:p.active
-  }));
-
-  // classrooms
-  const ctMap={};
-  (rCT.data||[]).forEach(r=>{
-    (ctMap[r.classroom_id]=ctMap[r.classroom_id]||[]).push(r.teacher_id);
-  });
-  
-  DB.classrooms=(rCls.data||[]).map(c=>({
-    id:c.id,
-    ownerId:c.owner_id,
-    name:c.name,
-    level:c.level||'',
-    year:c.year||'',
-    teacherIds:ctMap[c.id]||[]
-  }));
-
-  // subject -> classroomIds
-  const scMap={};
-  (rSubCls.data||[]).forEach(r=>{
-    (scMap[r.subject_id]=scMap[r.subject_id]||[]).push(r.classroom_id);
-  });
-  
-  DB.subjects=(rSubj.data||[]).map(s=>({
-    id:s.id,
-    ownerId:s.owner_id,
-    code:s.code||'',
-    name:s.name,
-    credits:s.credits||0,
-    term:s.term||'year',
-    year:s.year||'',
-    schedule:s.schedule||[],
-    classroomIds:scMap[s.id]||[]
-  }));
-
-  // ✅ สร้าง students โดยไม่มี attendance ตอน init
+  // ✅ เพิ่มส่วนนี้หลังสร้าง DB.students
   DB.students=(rStu.data||[]).map(s=>({
     id:s.id,
     classroomId:s.classroom_id,
@@ -603,51 +522,22 @@ async function loadFromSupabase(){
     mustChange:s.must_change,
     pw:'',
     user_id:s.user_id,
-    attendance:{}  // ✅ เริ่มต้นเป็น object ว่าง
+    attendance:{} // ตั้งค่าเริ่มต้นเป็น {} ก่อน
   }));
-
-  // scores -> map เข้า assignment object
-  const scoreMap={};
-  (rScore.data||[]).forEach(x=>{
-    if(!scoreMap[x.assignment_id]) scoreMap[x.assignment_id]={};
-    scoreMap[x.assignment_id][x.student_id]={
-      value:x.value,
-      note:x.note||'',
-      submittedAt:x.submitted_at
-    };
+  
+  // ✅ Map ข้อมูล attendance เข้า students
+  (rAtt.data||[]).forEach(a=>{
+    const student = DB.students.find(s=>s.id===a.student_id);
+    if(student){
+      const dateKey = a.date.split('T')[0]; // แปลง timestamp เป็น YYYY-MM-DD
+      const key = a.subject_id+'|'+dateKey;
+      student.attendance[key] = a.status;
+    }
   });
-  
-  console.log('✅ Scores mapped for assignments:', Object.keys(scoreMap).length);
-  
-  DB.assignments=(rAsg.data||[]).map(a=>({
-    id:a.id,
-    subjectId:a.subject_id,
-    name:a.name,
-    type:a.type||'during',
-    fullScore:a.full_score||10,
-    due:a.due?a.due.slice(0,16):'',
-    createdAt:a.created_at||today(),
-    scores:scoreMap[a.id]||{}
-  }));
-
-  // logs
-  DB.logs=(rLog.data||[]).map(l=>({
-    id:l.id,
-    at:l.at,
-    by:l.by_id,
-    byName:l.by_name,
-    type:l.type,
-    detail:l.detail,
-    classroom:l.classroom,
-    subject:l.subject,
-    status:l.status,
-    name:l.name
-  }));
   
   console.log('✅ Load complete:', {
     students: DB.students.length,
-    assignments: DB.assignments.length,
-    logs: DB.logs.length
+    attendance_records: rAtt.data?.length || 0
   });
 }
 // โหลด attendance เฉพาะ subject
