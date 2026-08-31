@@ -1391,6 +1391,9 @@ async function applyMark(stu,ctx,isScan){
     soundOK();
     popupSuccess('เช็กชื่อสำเร็จ',[`<b>${esc(stu.name)}</b>`, `สถานะ: <b>${ATTLABEL[manualMode]}</b>`]);
     if(!isScan) render();
+    // ใน applyMark() หลังบันทึก
+    console.log('Saved attendance:', data);
+    console.log('Updated student:', stu.attendance);
   }
   // ... (โค้ดรับงานเดิม)
 }
