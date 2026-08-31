@@ -1358,7 +1358,13 @@ async function applyMark(stu,ctx,isScan){
   if(scanMode==='att'){
     const k=attKey(scanSubjId,scanDate);
     
-    // ✅ เช็คว่าเช็กชื่อแล้วหรือยัง
+    // ✅ เช็คใน memory ก่อน
+    if(stu.attendance && stu.attendance[k]){
+      beep(300,.2,'sawtooth');
+      return banner(`${stu.name} เช็กชื่อแล้ว (${ATTLABEL[stu.attendance[k]]})`,true);
+    }
+    
+    // ✅ เช็คใน Supabase (กรณีข้อมูลไม่ sync)
     const {data:existing} = await sb.from('attendance')
       .select('status')
       .eq('student_id', stu.id)
@@ -1367,31 +1373,50 @@ async function applyMark(stu,ctx,isScan){
       .maybeSingle();
     
     if(existing){
+      // ✅ อัปเดต memory ด้วยข้อมูลจาก DB
+      stu.attendance = stu.attendance || {};
+      stu.attendance[k] = existing.status;
+      
       beep(300,.2,'sawtooth');
       return banner(`${stu.name} เช็กชื่อแล้ว (${ATTLABEL[existing.status]})`,true);
     }
     
-    // ✅ บันทึกเฉพาะ 4 คอลัมน์
+    // ✅ บันทึกข้อมูลใหม่
     const {data, error}=await sb.from('attendance').insert({
       student_id: stu.id,
       subject_id: scanSubjId,
       date: scanDate,
-      status: manualMode,
-      marked_at: new Date().toISOString(),
-      recorder_id: session.id,
-      recorder_name: session.name
+      status: manualMode
     }).select().single();
     
     if(error){
       console.error('❌ Insert error:', error);
+      
+      // ✅ ถ้า error เพราะข้อมูลซ้ำ ให้ sync จาก DB
+      if(error.code === '23505' || error.message.includes('duplicate')){
+        const {data:synced} = await sb.from('attendance')
+          .select('status')
+          .eq('student_id', stu.id)
+          .eq('subject_id', scanSubjId)
+          .eq('date', scanDate)
+          .maybeSingle();
+        
+        if(synced){
+          stu.attendance = stu.attendance || {};
+          stu.attendance[k] = synced.status;
+          render();
+          return banner(`${stu.name} เช็กชื่อไปก่อนหน้านี้แล้ว (${ATTLABEL[synced.status]})`,false);
+        }
+      }
+      
       return banner('บันทึกไม่สำเร็จ: '+error.message,true);
     }
     
     console.log('✅ Saved attendance:', data);
     
-    // อัปเดต memory
-    stu.attendance=stu.attendance||{};
-    stu.attendance[k]=manualMode;
+    // ✅ อัปเดต memory ทันที
+    stu.attendance = stu.attendance || {};
+    stu.attendance[k] = manualMode;
     
     logAction({
       type:'att', 
@@ -1520,10 +1545,12 @@ async function commitManual(){
     const s=DB.students.find(x=>x.id===id);
     if(!s) return;
     
-    // ถ้าเช็กแล้ว ข้าม
-    if(s.attendance[k]) return;
+    // ✅ เช็คว่าเช็กแล้วหรือยัง (ใน memory)
+    if(s.attendance && s.attendance[k]) {
+      console.log(`⚠️ ${s.name} already marked as ${s.attendance[k]}`);
+      return;
+    }
     
-    // ✅ เตรียมข้อมูลเฉพาะ 4 คอลัมน์
     rows.push({
       student_id: id,
       subject_id: scanSubjId,
@@ -1539,6 +1566,8 @@ async function commitManual(){
     return banner('นักเรียนที่เลือกเช็กชื่อหมดแล้ว',true);
   }
   
+  console.log(`📝 Attempting to mark ${rows.length} students...`);
+  
   // ✅ บันทึกทั้งหมด
   const {data, error}=await sb.from('attendance')
     .insert(rows)
@@ -1546,21 +1575,55 @@ async function commitManual(){
   
   if(error){
     console.error('❌ Batch insert error:', error);
+    
+    // ✅ ถ้า error 409 = ข้อมูลซ้ำ ให้ดึงข้อมูลจาก DB มาอัปเดต memory
+    if(error.code === '23505' || error.message.includes('duplicate') || error.message.includes('409')){
+      console.warn('⚠️ Duplicate entries detected, syncing from DB...');
+      
+      // ดึงข้อมูลที่พยายามบันทึกมาเช็คว่ามีอยู่แล้วหรือไม่
+      const {data: existing} = await sb.from('attendance')
+        .select('*')
+        .eq('subject_id', scanSubjId)
+        .eq('date', scanDate)
+        .in('student_id', rows.map(r=>r.student_id));
+      
+      // อัปเดต memory ด้วยข้อมูลจาก DB
+      if(existing){
+        existing.forEach(att=>{
+          const stu = DB.students.find(s=>s.id===att.student_id);
+          if(stu){
+            stu.attendance = stu.attendance || {};
+            stu.attendance[k] = att.status;
+            console.log(`✅ Synced ${stu.name}: ${att.status}`);
+          }
+        });
+      }
+      
+      window._pending.clear();
+      render();
+      return banner('ข้อมูลถูกบันทึกไปก่อนหน้านี้แล้ว (Synced)',false);
+    }
+    
     return banner('บันทึกไม่สำเร็จ: '+error.message,true);
   }
   
   console.log('✅ Saved batch:', data);
   
-  // อัปเดต memory
-  toMark.forEach(s=>{
-    s.attendance[k]=manualMode;
-    logAction({
-      type:'att', 
-      name:s.name, 
-      status:manualMode,
-      subject: DB.subjects.find(x=>x.id===scanSubjId)?.name || '',
-      classroom: DB.classrooms.find(x=>x.id===s.classroomId)?.name || ''
-    });
+  // ✅ อัปเดต memory ทันทีหลังบันทึกสำเร็จ
+  toMark.forEach((s, idx)=>{
+    s.attendance = s.attendance || {};
+    s.attendance[k] = manualMode;
+    
+    // Log เฉพาะที่บันทึกสำเร็จจริงๆ
+    if(data && data[idx]){
+      logAction({
+        type:'att', 
+        name:s.name, 
+        status:manualMode,
+        subject: DB.subjects.find(x=>x.id===scanSubjId)?.name || '',
+        classroom: DB.classrooms.find(x=>x.id===s.classroomId)?.name || ''
+      });
+    }
   });
   
   window._pending.clear();
