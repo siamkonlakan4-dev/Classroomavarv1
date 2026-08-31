@@ -538,6 +538,9 @@ async function loadFromSupabase(){
     students: DB.students.length,
     attendance_records: rAtt.data?.length || 0
   });
+  // เพิ่ม Console log ใน loadFromSupabase()
+  console.log('Attendance loaded:', rAtt.data);
+  console.log('Student attendance:', DB.students[0]?.attendance);
 }
 // โหลด attendance เฉพาะ subject
 async function loadAttendanceForSubject(subjectId){
