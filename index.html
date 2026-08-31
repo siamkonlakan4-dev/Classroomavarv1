@@ -1376,7 +1376,10 @@ async function applyMark(stu,ctx,isScan){
       student_id: stu.id,
       subject_id: scanSubjId,
       date: scanDate,
-      status: manualMode
+      status: manualMode,
+      marked_at: new Date().toISOString(),
+      recorder_id: session.id,
+      recorder_name: session.name
     }).select().single();
     
     if(error){
