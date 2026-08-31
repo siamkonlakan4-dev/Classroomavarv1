@@ -1358,7 +1358,7 @@ async function applyMark(stu,ctx,isScan){
   if(scanMode==='att'){
     const k=attKey(scanSubjId,scanDate);
     
-    // 🔥 เช็คใน Supabase ก่อน
+    // ✅ เช็คว่าเช็กชื่อแล้วหรือยัง
     const {data:existing} = await sb.from('attendance')
       .select('status')
       .eq('student_id', stu.id)
@@ -1371,31 +1371,46 @@ async function applyMark(stu,ctx,isScan){
       return banner(`${stu.name} เช็กชื่อแล้ว (${ATTLABEL[existing.status]})`,true);
     }
     
-    // ✅ บันทึกลง Supabase
+    // ✅ บันทึกเฉพาะ 4 คอลัมน์
     const {data, error}=await sb.from('attendance').insert({
-      student_id:stu.id,
-      subject_id:scanSubjId,
-      date:scanDate,
-      status:manualMode,
-      marked_at: new Date().toISOString(),
-      recorder: session.name
-    }).select().single(); // ✅ เพิ่ม .select().single()
+      student_id: stu.id,
+      subject_id: scanSubjId,
+      date: scanDate,
+      status: manualMode
+    }).select().single();
     
-    if(error) return banner('บันทึกไม่สำเร็จ: '+error.message,true);
+    if(error){
+      console.error('❌ Insert error:', error);
+      return banner('บันทึกไม่สำเร็จ: '+error.message,true);
+    }
     
-    // ✅ อัปเดต memory หลังบันทึกสำเร็จ
+    console.log('✅ Saved attendance:', data);
+    
+    // อัปเดต memory
     stu.attendance=stu.attendance||{};
     stu.attendance[k]=manualMode;
     
-    logAction({type:'att', name:stu.name, status:manualMode});
+    logAction({
+      type:'att', 
+      name:stu.name, 
+      status:manualMode,
+      subject: DB.subjects.find(x=>x.id===scanSubjId)?.name || '',
+      classroom: DB.classrooms.find(x=>x.id===stu.classroomId)?.name || ''
+    });
+    
     soundOK();
-    popupSuccess('เช็กชื่อสำเร็จ',[`<b>${esc(stu.name)}</b>`, `สถานะ: <b>${ATTLABEL[manualMode]}</b>`]);
+    popupSuccess('เช็กชื่อสำเร็จ',[
+      `<b>${esc(stu.name)}</b>`, 
+      `สถานะ: <b>${ATTLABEL[manualMode]}</b>`
+    ]);
+    
     if(!isScan) render();
-    // ใน applyMark() หลังบันทึก
-    console.log('Saved attendance:', data);
-    console.log('Updated student:', stu.attendance);
   }
-  // ... (โค้ดรับงานเดิม)
+  
+  // โค้ดรับงานเดิม
+  else if(scanMode==='work'){
+    // ... (โค้ดเดิม)
+  }
 }
 
   
@@ -1502,16 +1517,15 @@ async function commitManual(){
     const s=DB.students.find(x=>x.id===id);
     if(!s) return;
     
-    // ✅ ถ้าเช็กแล้ว ข้าม
+    // ถ้าเช็กแล้ว ข้าม
     if(s.attendance[k]) return;
     
+    // ✅ เตรียมข้อมูลเฉพาะ 4 คอลัมน์
     rows.push({
-      student_id:id,
-      subject_id:scanSubjId,
-      date:scanDate,
-      status:manualMode,
-      marked_at: new Date().toISOString(),
-      recorder: session.name
+      student_id: id,
+      subject_id: scanSubjId,
+      date: scanDate,
+      status: manualMode
     });
     toMark.push(s);
   });
@@ -1522,27 +1536,28 @@ async function commitManual(){
     return banner('นักเรียนที่เลือกเช็กชื่อหมดแล้ว',true);
   }
   
-  // 🔥 เพิ่ม .select() เพื่อดึงข้อมูลกลับมา
+  // ✅ บันทึกทั้งหมด
   const {data, error}=await sb.from('attendance')
     .insert(rows)
-    .select(); // ✅ เพิ่มบรรทัดนี้
+    .select();
   
-  if(error) return banner('บันทึกไม่สำเร็จ: '+error.message,true);
+  if(error){
+    console.error('❌ Batch insert error:', error);
+    return banner('บันทึกไม่สำเร็จ: '+error.message,true);
+  }
   
-  // ✅ อัปเดต memory ด้วยข้อมูลจาก DB
-  toMark.forEach((s, i)=>{
+  console.log('✅ Saved batch:', data);
+  
+  // อัปเดต memory
+  toMark.forEach(s=>{
     s.attendance[k]=manualMode;
-    
-    // 🔥 Log เฉพาะที่บันทึกสำเร็จ
-    if(data && data[i]) {
-      logAction({
-        type:'att',
-        name:s.name,
-        status:manualMode,
-        subject: DB.subjects.find(x=>x.id===scanSubjId)?.name || '',
-        classroom: DB.classrooms.find(x=>x.id===s.classroomId)?.name || ''
-      });
-    }
+    logAction({
+      type:'att', 
+      name:s.name, 
+      status:manualMode,
+      subject: DB.subjects.find(x=>x.id===scanSubjId)?.name || '',
+      classroom: DB.classrooms.find(x=>x.id===s.classroomId)?.name || ''
+    });
   });
   
   window._pending.clear();
