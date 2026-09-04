@@ -1565,60 +1565,199 @@ function markByCode(){
   applyMark(stu,ctx,false);
 }
 
-function renderScan(){setTopActions('');const el=document.getElementById('page-scan');const ctx=scanCtx();
-  if(!ctx||!ctx.cls){el.innerHTML=`<div class="empty"><div class="big">📚</div>ยังไม่มีรายวิชา<br>สร้างห้องและรายวิชาก่อน<br><button class="btn" onclick="go('class')">ไปหน้าชั้นเรียน</button></div>`;return;}
-  const{sub,cls,clsIds,studs}=ctx;activeClassId=cls.id;const asgs=subjAssign(scanSubjId);
-  if(!scanAssignId||!asgs.find(a=>a.id===scanAssignId))scanAssignId=asgs[0]?.id||null;
-  let warn='';if((sub.schedule||[]).length){const dName=THDAYS[new Date(scanDate+'T00:00').getDay()];if(!sub.schedule.some(x=>x.day===dName))warn=`<div class="meta" style="color:var(--orange);margin-top:6px">⚠️ วิชานี้ไม่มีในตารางสอนวัน${dName}</div>`;}
-  const modes=[['present','มาเรียน','green'],['late','มาสาย','orange'],['absent','ขาดเรียน','red'],['skip','หนีเรียน','purple'],['leave','ลา/ลากิจ','teal']];
-  const recent=DB.logs.filter(l=>(l.type==='att'||l.type==='work')&&l.classroom===cls.name).slice(0,6);
-  const subjOptions=mySubjects().map(s=>`<option value="${s.id}" ${s.id===scanSubjId?'selected':''}>${esc(s.code||'')} ${esc(s.name)}${(s.classroomIds||[]).length>1?' · '+(s.classroomIds||[]).length+' ห้อง':''}</option>`).join('');
-  const clsSelector=clsIds.length>1?`<label class="fl">เลือกห้อง (${clsIds.length} ห้อง)</label><select style="margin-bottom:6px" onchange="window._pending.clear();scanClsId=this.value;render()">${clsIds.map(id=>`<option value="${id}" ${id===scanClsId?'selected':''}>${esc(clsById(id)?.name||'')}</option>`).join('')}</select>`:'';
-  const aCur=DB.assignments.find(x=>x.id===scanAssignId);
-  const doneAtt=studs.filter(s=>s.attendance?.[attKey(scanSubjId,scanDate)]).length;
-  const doneWork=aCur?studs.filter(s=>aCur.scores?.[s.id]?.submittedAt).length:0;
+function renderScan(){
+  const ctx=scanCtx();
+  if(!ctx) return html`<div style="padding:12px;color:#888">เลือกรายวิชา</div>`;
+  
+  const {subj,cls,stuList,marked}=ctx;
+  const totalStu=stuList.length;
+  const k=attKey(scanSubjId,scanDate);
+  
+  // นับสถิติ
+  const stats={present:0,late:0,absent:0,leave:0,none:0};
+  stuList.forEach(s=>{
+    const st=s.attendance?.[k];
+    if(st) stats[st]++;
+    else stats.none++;
+  });
 
-  const manualBlock=studs.length
-    ?`<div class="grid">${studs.map(s=>{const done=s.attendance?.[attKey(scanSubjId,scanDate)]||'';const picked=window._pending.has(s.id);
-        return`<div class="scard ${picked?'picked':''} ${done?'locked':''}" onclick="${done?`undoAtt('${s.id}')`:`togglePending('${s.id}')`}">${done?`<div class="att ${done}"></div>`:picked?`<div class="pick">✓</div>`:''}<div class="avatar">${avatarSVG(s.avatar,54)}</div><div class="name">${esc(s.name)}</div><div class="meta" style="font-size:11px">เลขที่ ${s.number}</div><div class="code" style="color:${done?ATTCOLOR[done]:picked?'var(--blue)':'var(--label)'}">${done?'🔒 '+ATTLABEL[done]+' · แตะลบ':picked?'✓ เลือกแล้ว':'แตะเพื่อเลือก'}</div></div>`;
-      }).join('')}</div>
-      <div class="savebar"><button class="btn green" ${window._pending.size?'':'disabled'} onclick="commitManual()">💾 บันทึก ${ATTLABEL[manualMode]} (${window._pending.size} คน)</button>${window._pending.size?`<button class="btn gray" onclick="clearPending()">ล้าง</button>`:''}</div>`
-    :`<p class="meta">ห้องนี้ยังไม่มีนักเรียน</p>`;
+  // ✅ ดึง log ล่าสุดของรายวิชานี้ (10 รายการล่าสุด)
+  const recentLogs = DB.logs
+    .filter(log => 
+      log.type === 'att' && 
+      log.subject === subj.name
+    )
+    .slice(0, 10);
 
-  const workBlock=(()=>{
-  const a=DB.assignments.find(x=>x.id===scanAssignId);
-  if(!a)return'<p class="meta">ยังไม่ได้เลือกชิ้นงาน</p>';
-  if(!studs.length)return'<p class="meta">ห้องนี้ยังไม่มีนักเรียน</p>';
-  const grid=`<div class="grid">${studs.map(s=>{
-    const sc=a.scores?.[s.id]||{};const submitted=!!sc.submittedAt;const graded=submitted&&sc.value!=null;
-    const picked=window._pending.has(s.id);
-    const label=submitted?(graded?`🔒 ตรวจแล้ว ${sc.value}/${a.fullScore} · แตะลบ`:'🔒 ส่งแล้ว (รอตรวจ) · แตะลบ'):picked?'✓ เลือกแล้ว':'แตะเพื่อเลือก';
-    const col=submitted?'var(--green)':picked?'var(--blue)':'var(--label)';
-    return`<div class="scard ${picked?'picked':''} ${submitted?'locked':''}" onclick="${submitted?`undoWork('${a.id}','${s.id}')`:`togglePending('${s.id}')`}">${submitted?`<div class="att present"></div>`:picked?`<div class="pick">✓</div>`:''}<div class="avatar">${avatarSVG(s.avatar,54)}</div><div class="name">${esc(s.name)}</div><div class="meta" style="font-size:11px">เลขที่ ${s.number}</div><div class="code" style="color:${col}">${label}</div></div>`;
-  }).join('')}</div>`;
-  const bar=`<div class="savebar"><button class="btn green" ${window._pending.size?'':'disabled'} onclick="commitWork()">💾 บันทึกการส่งงาน (${window._pending.size} คน)</button>${window._pending.size?`<button class="btn gray" onclick="clearPending()">ล้าง</button>`:''}</div>`;
-  return grid+bar;
-  })();
+  return html`
+  <div style="display:flex;flex-direction:column;gap:8px;padding:12px;max-width:800px;margin:0 auto">
+    
+    <!-- Header: รายวิชา + วันที่ -->
+    <div style="background:var(--surf2);padding:12px;border-radius:12px">
+      <div style="font-size:0.9rem;color:#6EE7B7;margin-bottom:4px">เช็กชื่อ</div>
+      <div style="font-weight:600;margin-bottom:8px">${subj.name}</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px">
+          <span style="color:#888;font-size:0.85rem">วันที่:</span>
+          <input type="date" value="${scanDate}" 
+            onchange="scanDate=this.value;render()" 
+            style="background:var(--surf3);border:1px solid var(--surf4);padding:4px 8px;border-radius:6px;color:#fff;font-size:0.9rem"/>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px">
+          <span style="color:#888;font-size:0.85rem">ห้อง:</span>
+          <select onchange="scanClsId=this.value;window._pending.clear();render()" 
+            style="background:var(--surf3);border:1px solid var(--surf4);padding:4px 8px;border-radius:6px;color:#fff;font-size:0.9rem">
+            ${subj.classroomIds.map(cid=>{
+              const c=DB.classrooms.find(x=>x.id===cid);
+              return `<option value="${cid}" ${cid===scanClsId?'selected':''}>${c?.name||cid}</option>`;
+            }).join('')}
+          </select>
+        </label>
+      </div>
+    </div>
 
-  el.innerHTML=`<div class="listcard">
-      <div class="row" style="margin-bottom:10px"><button class="btn sm ${scanMode==='att'?'':'gray'}" onclick="window._pending.clear();scanMode='att';render()">เช็กชื่อ</button><button class="btn sm ${scanMode==='work'?'':'gray'}" onclick="window._pending.clear();scanMode='work';render()">รับงาน</button></div>
-      <label class="fl">รายวิชา</label><select style="margin-bottom:6px" onchange="window._pending.clear();scanSubjId=this.value;scanClsId=null;scanAssignId=null;loadAttendanceForSubject(this.value).then(()=>render())">${subjOptions}</select>
-      ${clsSelector}<div class="meta" style="margin-bottom:10px">👧 ชั้น ${esc(cls.name)} · ${studs.length} คน · ${scanMode==='att'?`เช็กแล้ว ${doneAtt}/${studs.length}`:`รับงานแล้ว ${doneWork}/${studs.length}`}</div>
-      ${scanMode==='att'?`<label class="fl">วันที่</label><input type="date" value="${scanDate}" onchange="window._pending.clear();scanDate=this.value;render()">${warn}`:`<label class="fl">เลือกชิ้นงาน</label><select onchange="scanAssignId=this.value;render()">${asgs.map(a=>`<option value="${a.id}" ${a.id===scanAssignId?'selected':''}>${esc(a.name)}</option>`).join('')||'<option>— ยังไม่มีชิ้นงาน —</option>'}</select>`}
-      <label class="fl" style="margin-top:6px">ป้อน "รหัสนักเรียน" แล้วกด Enter</label>
-      <div class="row"><input id="codeIn" placeholder="เช่น 12345" style="margin:0;flex:1" onkeydown="if(event.key==='Enter')markByCode()"><button class="btn green" onclick="markByCode()">บันทึก</button></div>
-      <div id="reader" style="border-radius:14px;overflow:hidden;margin-top:12px"></div>
-      <div class="row" style="margin-top:10px"><button class="btn" onclick="startScanner()">เปิดกล้องยิง QR</button><button class="btn gray" onclick="stopScanner();render()">หยุด</button></div></div>
-        ${scanMode==='att'
-      ?`<div class="listcard"><h3>👆 เช็กชื่อด้วยมือ</h3>
-          <p class="meta" style="margin:4px 0 10px">1) เลือกสถานะ → 2) แตะเลือกนักเรียน (เลือกได้หลายคน) → 3) กดบันทึก · คนที่เช็กแล้วจะล็อก 🔒 กันเช็กซ้ำ</p>
-          <div class="row" style="margin-bottom:12px">${modes.map(([k,lb,c])=>`<button class="btn sm ${manualMode===k?c:'gray'}" onclick="setManualMode('${k}')">${lb}</button>`).join('')}</div>
-          ${manualBlock}</div>`
-      :`<div class="listcard"><h3>👆 รับงานหลายคน</h3>
-          <p class="meta" style="margin:4px 0 10px">1) เลือกชิ้นงานด้านบน → 2) แตะเลือกนักเรียน (เลือกได้หลายคน) → 3) กดบันทึก · คนที่ส่งแล้วจะล็อก 🔒 แตะซ้ำเพื่อยกเลิก</p>
-          ${workBlock}</div>`}
-    <div class="listcard"><h3>🕒 ประวัติล่าสุด</h3>${recent.length?recent.map(l=>`<div class="logrow"><span class="ld" style="background:${l.status?ATTCOLOR[l.status]:'var(--blue)'}"></span><div style="flex:1"><b>${esc(l.name)}</b><div class="meta">${esc(l.subject||'')} · ${esc(l.detail||'')}</div></div><span class="meta">${thDateTime(l.at).split(' ').slice(-1)[0]}</span></div>`).join(''):'<p class="meta">ยังไม่มีรายการ</p>'}</div>`;}
+    <!-- สถิติการเช็กชื่อ -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:6px">
+      <div style="background:var(--surf2);padding:8px;border-radius:8px;text-align:center">
+        <div style="font-size:1.5rem;font-weight:600;color:#6EE7B7">${stats.present}</div>
+        <div style="font-size:0.75rem;color:#888">มา</div>
+      </div>
+      <div style="background:var(--surf2);padding:8px;border-radius:8px;text-align:center">
+        <div style="font-size:1.5rem;font-weight:600;color:#FCD34D">${stats.late}</div>
+        <div style="font-size:0.75rem;color:#888">สาย</div>
+      </div>
+      <div style="background:var(--surf2);padding:8px;border-radius:8px;text-align:center">
+        <div style="font-size:1.5rem;font-weight:600;color:#F87171">${stats.absent}</div>
+        <div style="font-size:0.75rem;color:#888">ขาด</div>
+      </div>
+      <div style="background:var(--surf2);padding:8px;border-radius:8px;text-align:center">
+        <div style="font-size:1.5rem;font-weight:600;color:#38BDF8">${stats.leave}</div>
+        <div style="font-size:0.75rem;color:#888">ลา</div>
+      </div>
+      <div style="background:var(--surf2);padding:8px;border-radius:8px;text-align:center">
+        <div style="font-size:1.5rem;font-weight:600;color:#888">${stats.none}</div>
+        <div style="font-size:0.75rem;color:#888">ยังไม่เช็ก</div>
+      </div>
+    </div>
 
+    <!-- ปุ่มโหมดเช็กชื่อ -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      ${['present','late','absent','leave'].map(mode=>html`
+        <button onclick="manualMode='${mode}';render()"
+          style="flex:1;min-width:80px;padding:8px;border-radius:999px;font-weight:500;font-size:0.85rem;
+            background:${manualMode===mode?ATTCOLOR[mode]:'var(--surf3)'};
+            color:${manualMode===mode?'#000':'#fff'};
+            border:2px solid ${manualMode===mode?ATTCOLOR[mode]:'transparent'}">
+          ${ATTLABEL[mode]}
+        </button>
+      `).join('')}
+    </div>
+
+    <!-- QR Scanner -->
+    ${scanMode==='qr'?html`
+      <div style="background:var(--surf2);padding:12px;border-radius:12px">
+        <div id="qr-reader" style="width:100%;max-width:400px;margin:0 auto"></div>
+        <button onclick="stopQR();scanMode='manual';render()" 
+          style="width:100%;margin-top:8px;padding:8px;border-radius:999px;background:var(--surf3);color:#fff">
+          ปิด QR Scanner
+        </button>
+      </div>
+    `:html`
+      <button onclick="scanMode='qr';render();setTimeout(startQR,100)" 
+        style="padding:10px;border-radius:999px;background:#6EE7B7;color:#000;font-weight:600">
+        📷 เปิด QR Scanner
+      </button>
+    `}
+
+    <!-- รายชื่อนักเรียน -->
+    <div style="background:var(--surf2);padding:12px;border-radius:12px">
+      <div style="font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+        <span>รายชื่อนักเรียน (${totalStu})</span>
+        ${window._pending.size>0?html`
+          <button onclick="commitManual()" 
+            style="padding:6px 16px;border-radius:999px;background:#6EE7B7;color:#000;font-weight:600;font-size:0.85rem">
+            บันทึก (${window._pending.size})
+          </button>
+        `:''}
+      </div>
+      
+      <div style="display:flex;flex-direction:column;gap:4px;max-height:400px;overflow-y:auto">
+        ${stuList.map(s=>{
+          const st=s.attendance?.[k];
+          const pending=window._pending.has(s.id);
+          const displayStatus = pending ? manualMode : st;
+          
+          return html`
+          <div onclick="togglePending('${s.id}')" 
+            style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;cursor:pointer;
+              background:${pending?'var(--surf4)':'var(--surf3)'};
+              opacity:${st&&!pending?'0.6':'1'};
+              border:2px solid ${pending?ATTCOLOR[manualMode]:'transparent'}">
+            
+            <div style="width:32px;height:32px;border-radius:50%;background:var(--surf4);
+              display:flex;align-items:center;justify-content:center;font-size:0.8rem">
+              ${s.number||'?'}
+            </div>
+            
+            <div style="flex:1">
+              <div style="font-weight:500">${s.name}</div>
+              ${s.code?html`<div style="font-size:0.75rem;color:#888">${s.code}</div>`:''}
+            </div>
+            
+            ${displayStatus?html`
+              <div style="padding:4px 12px;border-radius:999px;font-size:0.75rem;font-weight:600;
+                background:${ATTCOLOR[displayStatus]};color:#000">
+                ${ATTLABEL[displayStatus]}
+              </div>
+            `:''}
+          </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- ✅ ประวัติการเช็กชื่อล่าสุด -->
+    ${recentLogs.length > 0 ? html`
+      <div style="background:var(--surf2);padding:12px;border-radius:12px">
+        <div style="font-weight:600;margin-bottom:8px;color:#6EE7B7">
+          📋 ประวัติล่าสุด
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto">
+          ${recentLogs.map(log => {
+            const timeAgo = formatTimeAgo(log.at);
+            const statusColor = ATTCOLOR[log.status] || '#888';
+            
+            return html`
+              <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;
+                background:var(--surf3);border-radius:6px;font-size:0.85rem">
+                
+                <div style="width:6px;height:6px;border-radius:50%;background:${statusColor};
+                  flex-shrink:0"></div>
+                
+                <div style="flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-weight:500">${log.name}</span>
+                  <span style="padding:2px 8px;border-radius:999px;font-size:0.7rem;
+                    background:${statusColor};color:#000;font-weight:600">
+                    ${ATTLABEL[log.status]}
+                  </span>
+                  ${log.classroom ? html`
+                    <span style="color:#888;font-size:0.75rem">${log.classroom}</span>
+                  ` : ''}
+                </div>
+                
+                <div style="color:#888;font-size:0.75rem;white-space:nowrap">
+                  ${timeAgo}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+  </div>
+  `;
+}
 async function undoAtt(id){const ctx=scanCtx();if(!ctx)return;
   const s=DB.students.find(x=>x.id===id);if(!s)return;
   const k=attKey(scanSubjId,scanDate);const cur=s.attendance?.[k];if(!cur)return;
