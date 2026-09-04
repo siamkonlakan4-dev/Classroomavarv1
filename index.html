@@ -1681,9 +1681,11 @@ async function commitManual(){
   
   console.log(`📝 Marking ${rows.length} students...`);
   
-  // ✅ บันทึกทั้งหมด
+   // ✅ บันทึกทั้งหมด (upsert แทน insert)
   const {data, error}=await sb.from('attendance')
-    .insert(rows)
+    .upsert(rows, {
+      onConflict: 'student_id,subject_id,date'
+    })
     .select();
   
   if(error){
