@@ -675,12 +675,17 @@ async function loadAttendanceForSubject(subjectId){
   (data||[]).forEach(a=>{
     const student = DB.students.find(s=>s.id===a.student_id);
     if(student){
+      // ✅ เพิ่มบรรทัดนี้
+      student.attendance = student.attendance || {};
+      
       const dateKey = a.date.split('T')[0];
       const key = a.subject_id+'|'+dateKey;
       student.attendance[key] = a.status;
     }
   });
-}  
+  
+  console.log('✅ Attendance mapped to students');
+}
 
 function renderLoginBrand(){
   const t=document.getElementById('loginTitle');
