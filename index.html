@@ -1057,7 +1057,6 @@ async function resetStuToBirth(id){
   }
   
   // อัปเดต flag mustChange ใน DB
-  await sb.from('students').update({ must_change: true }).eq('id', s.id);
   s.mustChange = true;
   
   logAction({type:'student',detail:'รีเซ็ตรหัสนักเรียนเป็นวันเกิด',byName:s.name});
@@ -1079,8 +1078,6 @@ async function setStuTempPw(id){
   if (res.error || !res.data?.ok) {
     return banner('ตั้งรหัสไม่สำเร็จ: ' + (res.data?.error || res.error?.message || ''), true);
   }
-  
-  await sb.from('students').update({ must_change: true }).eq('id', s.id);
   s.mustChange = true;
   
   logAction({type:'student',detail:'ตั้งรหัสชั่วคราวให้นักเรียน',byName:s.name});
