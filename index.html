@@ -458,14 +458,32 @@ function studentSession(stu){return{id:'stu_'+stu.id,role:'student',name:stu.nam
 function persistSession(id){try{sessionStorage.setItem('cr_uid',id);}catch(e){}}
 
 // ฟังก์ชันออกจากระบบ
-async function logout(){
-  await sb.auth.signOut();
-  session=null;
-  CURRENT_USER=null;
-  show('landing');
-  hide('app');
-  hide('topbar');
-  banner('ออกจากระบบแล้ว');
+async function logout() {
+  try {
+    const { error } = await sb.auth.signOut();
+
+    if (error) {
+      banner('ออกจากระบบไม่สำเร็จ: ' + error.message, true);
+      return;
+    }
+
+    session = null;
+    CURRENT_USER = null;
+
+    try {
+      sessionStorage.removeItem('cr_uid');
+    } catch (e) {
+      console.warn('ล้าง session ในเครื่องไม่สำเร็จ:', e);
+    }
+
+    // โหลดหน้าใหม่หลังออกจากระบบสำเร็จ
+    // ระบบจะกลับไปแสดงหน้าเข้าสู่ระบบ
+    window.location.reload();
+
+  } catch (error) {
+    console.error('Logout failed:', error);
+    banner('ออกจากระบบไม่สำเร็จ: ' + error.message, true);
+  }
 }  
   
 async function doLogin(){
