@@ -1913,10 +1913,80 @@ function buildReportHTML(cls,subs,studs){
   const subList=repSubj==='all'?subs.map(s=>s.id):[repSubj];const asgs=DB.assignments.filter(a=>subList.includes(a.subjectId));const subOf=stu=>asgs.filter(a=>a.scores?.[stu.id]?.submittedAt).length;const totalA=asgs.length;
   return`<div class="listcard"><h3>📦 สรุปการส่งงาน</h3><div class="meta" style="margin-bottom:6px">${esc(cls.name)} · ${totalA} ชิ้นงาน</div>${studs.map(s=>{const n=subOf(s);const pct=totalA?Math.round(n/totalA*100):0;return`<div style="margin:9px 0"><div class="row"><span style="font-size:13px">${s.number}. ${esc(s.name)}</span><div class="spacer"></div><b>${n}/${totalA}</b></div><div style="background:var(--sep);border-radius:8px;height:9px;margin-top:4px"><div style="width:${pct}%;height:100%;background:var(--gGreen);border-radius:8px"></div></div></div>`;}).join('')}</div>`;
 }
-function printReport(){
-  const cls=clsById(repCls);const subs=subjectsOf(repCls);const studs=studentsOf(repCls);
-  document.getElementById('reportPrint').innerHTML=buildReportPrintHTML(cls,subs,studs);
-  document.body.classList.add('print-report');window.print();
+function printReport() {
+  const cls = clsById(repCls);
+  if (!cls) return banner('กรุณาเลือกห้องเรียนก่อน', true);
+
+  const subs = subjectsOf(repCls);
+  const studs = studentsOf(repCls);
+  const container = document.getElementById('reportPrint');
+
+  container.innerHTML = buildReportPrintHTML(cls, subs, studs);
+
+  // นำช่องลงชื่อแบบเดิมออกก่อน
+  container.querySelectorAll('.rpt-sign').forEach(el => el.remove());
+
+  // กำหนดชื่อผู้ลงนามได้ที่นี่
+  // เว้นว่างเพื่อให้กรอกชื่อด้วยลายมือ
+  const printerName = session?.name || '';
+  const classroomTeacherName = '';
+  const academicHeadName = '';
+  const directorName = '';
+
+  // เปลี่ยนเป็น "รองผู้อำนวยการโรงเรียน" ได้
+  const directorPosition = 'ผู้อำนวยการโรงเรียน';
+
+  const signatureBox = (name, position) => `
+    <div style="
+      text-align:center;
+      font-size:13px;
+      line-height:1.8;
+      padding-top:10mm;
+      break-inside:avoid;
+      page-break-inside:avoid;
+    ">
+      <div>ลงชื่อ ................................................</div>
+      <div>
+        ( ${esc(name || '................................................')} )
+      </div>
+      <div>${esc(position)}</div>
+      <div style="font-size:12px">
+        วันที่ .......... / .......... / ..........
+      </div>
+    </div>
+  `;
+
+  container.insertAdjacentHTML('beforeend', `
+    <div class="rpt-sign" style="
+      margin-top:8mm;
+      break-inside:avoid;
+      page-break-inside:avoid;
+    ">
+      <div style="
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        column-gap:10mm;
+        row-gap:5mm;
+      ">
+        ${signatureBox(printerName, 'ผู้พิมพ์ข้อมูล')}
+        ${signatureBox(classroomTeacherName, 'ครูประจำชั้น')}
+        ${signatureBox(academicHeadName, 'หัวหน้ากลุ่มงานวิชาการ')}
+        ${signatureBox(directorName, directorPosition)}
+      </div>
+
+      <div style="
+        text-align:right;
+        font-size:11px;
+        color:#555;
+        margin-top:8mm;
+      ">
+        พิมพ์เมื่อ ${esc(thDateTime(new Date().toISOString()))}
+      </div>
+    </div>
+  `);
+
+  document.body.classList.add('print-report');
+  window.print();
 }
 
 function reportPrintShell(title,sub2,headCols,bodyRows,summary,teacherName,meName,printedAt){
