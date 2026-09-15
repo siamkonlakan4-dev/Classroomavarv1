@@ -361,27 +361,61 @@ function classLevelType(cls){const c=cls||activeCls();if(!c)return'primary';cons
 function termLabel(s){return(s.term==='1'||s.term==='2')?`ภาคเรียน ${s.term}/${s.year||''}`:`ปีการศึกษา ${s.year||''}`;}
 function thDate(iso){const d=new Date(iso);return`${d.getDate()} ${THMONTHS[d.getMonth()]} ${d.getFullYear()+543}`;}
 function thDateTime(iso){const d=new Date(iso);return`${thDate(iso)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}น.`;}
-function logAction(type, detail, classroom = '', subject = '', status = '', name = '') {
+function logAction(
+  input,
+  detail = '',
+  classroom = '',
+  subject = '',
+  status = '',
+  name = ''
+) {
+  const data = input && typeof input === 'object'
+    ? input
+    : { type: input, detail, classroom, subject, status, name };
+
+  const student = session?.studentId
+    ? DB.students.find(s => s.id === session.studentId)
+    : null;
+
   const log = {
     at: new Date().toISOString(),
-    by_id: session.id,        // ✅ เปลี่ยนจาก CURRENT_USER เป็น session
-    by_name: session.name,    // ✅ เปลี่ยนจาก CURRENT_USER เป็น session
-    type, detail, classroom, subject, status, name
+    by_id: student ? student.user_id : session?.id,
+    by_name: session?.name || '',
+    type: data.type || '',
+    detail: data.detail ||
+      (data.type === 'att' ? ATTLABEL[data.status] || '' : ''),
+    classroom: data.classroom || '',
+    subject: data.subject || '',
+    status: data.status || '',
+    name: data.name || ''
   };
+
+  DB.logs = DB.logs || [];
   DB.logs.unshift(log);
-  sb.from('logs').insert({
-    by_id: log.by_id,
-    by_name: log.by_name,
-    type: log.type,
-    detail: log.detail,
-    classroom: log.classroom,
-    subject: log.subject,
-    status: log.status,
-    name: log.name
-  }).then(r => {
-    if (r.error) console.warn('❌ log insert error:', r.error.message);
-    else if (r.data && r.data[0]) log.id = r.data[0].id;
-  });
+
+  // คืน Promise เพื่อให้จุดเรียกสามารถ await ได้
+  return sb.from('logs')
+    .insert(log)
+    .select()
+    .single()
+    .then(({ data: saved, error }) => {
+      if (error) throw error;
+
+      Object.assign(log, saved);
+      save();
+      return saved;
+    })
+    .catch(error => {
+      // เอาเฉพาะประวัติที่บันทึกไม่สำเร็จออก
+      DB.logs = DB.logs.filter(item => item !== log);
+      save();
+      console.error('Log insert failed:', error);
+      banner(
+        'บันทึกประวัติเหตุการณ์ไม่สำเร็จ: ' + error.message,
+        true
+      );
+      return null;
+    });
 }
   
 
@@ -1482,7 +1516,13 @@ function renderScan(){setTopActions('');const el=document.getElementById('page-s
   if(!scanAssignId||!asgs.find(a=>a.id===scanAssignId))scanAssignId=asgs[0]?.id||null;
   let warn='';if((sub.schedule||[]).length){const dName=THDAYS[new Date(scanDate+'T00:00').getDay()];if(!sub.schedule.some(x=>x.day===dName))warn=`<div class="meta" style="color:var(--orange);margin-top:6px">⚠️ วิชานี้ไม่มีในตารางสอนวัน${dName}</div>`;}
   const modes=[['present','มาเรียน','green'],['late','มาสาย','orange'],['absent','ขาดเรียน','red'],['skip','หนีเรียน','purple'],['leave','ลา/ลากิจ','teal']];
-  const recent=DB.logs.filter(l=>(l.type==='att'||l.type==='work')&&l.classroom===cls.name).slice(0,6);
+  const recent = DB.logs
+    .filter(l =>
+      (l.type === 'att' || l.type === 'work') &&
+      l.classroom === cls.name
+    )
+    .sort((a, b) => new Date(b.at) - new Date(a.at))
+    .slice(0, 6);
   const subjOptions=mySubjects().map(s=>`<option value="${s.id}" ${s.id===scanSubjId?'selected':''}>${esc(s.code||'')} ${esc(s.name)}${(s.classroomIds||[]).length>1?' · '+(s.classroomIds||[]).length+' ห้อง':''}</option>`).join('');
   const clsSelector=clsIds.length>1?`<label class="fl">เลือกห้อง (${clsIds.length} ห้อง)</label><select style="margin-bottom:6px" onchange="window._pending.clear();scanClsId=this.value;render()">${clsIds.map(id=>`<option value="${id}" ${id===scanClsId?'selected':''}>${esc(clsById(id)?.name||'')}</option>`).join('')}</select>`:'';
   const aCur=DB.assignments.find(x=>x.id===scanAssignId);
@@ -1528,7 +1568,7 @@ function renderScan(){setTopActions('');const el=document.getElementById('page-s
       :`<div class="listcard"><h3>👆 รับงานหลายคน</h3>
           <p class="meta" style="margin:4px 0 10px">1) เลือกชิ้นงานด้านบน → 2) แตะเลือกนักเรียน (เลือกได้หลายคน) → 3) กดบันทึก · คนที่ส่งแล้วจะล็อก 🔒 แตะซ้ำเพื่อยกเลิก</p>
           ${workBlock}</div>`}
-    <div class="listcard"><h3>🕒 ประวัติล่าสุด</h3>${recent.length?recent.map(l=>`<div class="logrow"><span class="ld" style="background:${l.status?ATTCOLOR[l.status]:'var(--blue)'}"></span><div style="flex:1"><b>${esc(l.name)}</b><div class="meta">${esc(l.subject||'')} · ${esc(l.detail||'')}</div></div><span class="meta">${thDateTime(l.at).split(' ').slice(-1)[0]}</span></div>`).join(''):'<p class="meta">ยังไม่มีรายการ</p>'}</div>`;}
+    <div class="listcard"><h3>🕒 ประวัติล่าสุด</h3>${recent.length?recent.map(l=>`<div class="logrow"><span class="ld" style="background:${l.status?ATTCOLOR[l.status]:'var(--blue)'}"></span><div style="flex:1"><b>${esc(l.name)}</b><div class="meta">${esc(l.subject||'')} · ${esc(l.detail||'')}</div></div><span class="meta">${thDateTime(l.at)}</span></div>`).join(''):'<p class="meta">ยังไม่มีรายการ</p>'}</div>`;}
 
 async function undoAtt(id){const ctx=scanCtx();if(!ctx)return;
   const s=DB.students.find(x=>x.id===id);if(!s)return;
