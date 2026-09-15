@@ -490,6 +490,7 @@ async function afterAuth(user){
 async function loadFromSupabase(){
   console.log('🔄 Loading from Supabase...');
   
+  // ✅ เพิ่ม rAtt กลับมา
   const [rSet,rProf,rCls,rStu,rSubj,rSubCls,rAsg,rScore,rAtt,rLog,rCT,rItems,rSItems]=await Promise.all([
     sb.from('settings').select('*'),
     sb.from('profiles').select('*'),
@@ -499,48 +500,16 @@ async function loadFromSupabase(){
     sb.from('subject_classrooms').select('*'),
     sb.from('assignments').select('*'),
     sb.from('scores').select('*'),
-    sb.from('attendance').select('*'), // ✅ เพิ่มบรรทัดนี้
+    sb.from('attendance').select('*'), // ✅ เพิ่มบรรทัดนี้กลับมา
     sb.from('logs').select('*').order('at',{ascending:false}).limit(200),
     sb.from('classroom_teachers').select('*'),
     sb.from('avatar_items').select('*'),
     sb.from('student_items').select('*'),
   ]);
   
-  // Settings
-  if(rSet.data?.[0]){
-    const s=rSet.data[0];
-    DB.systemName=s.system_name||'ระบบเช็กชื่อห้องเรียน';
-    DB.logo=s.logo||'';
-    DB.school=s.school||'';
-    DB.weights=s.weights||{during:70,final:30};
-  }
+  // ... (โค้ดเดิม)
   
-  // Users/Profiles
-  DB.users=(rProf.data||[]).map(p=>({
-    id:p.id,
-    username:p.username,
-    name:p.name,
-    role:p.role||'teacher',
-    active:p.active??true
-  }));
-  
-  // Classrooms
-  DB.classrooms=(rCls.data||[]).map(c=>({
-    id:c.id,
-    ownerId:c.owner_id,
-    name:c.name,
-    level:c.level||'',
-    year:c.year||'',
-    teacherIds:[]
-  }));
-  
-  // Map teachers → classrooms
-  (rCT.data||[]).forEach(ct=>{
-    const cls=DB.classrooms.find(c=>c.id===ct.classroom_id);
-    if(cls&&!cls.teacherIds.includes(ct.teacher_id))cls.teacherIds.push(ct.teacher_id);
-  });
-  
-  // Students (สร้างโครงสร้างพื้นฐานก่อน)
+  // ✅ เพิ่มส่วนนี้หลังสร้าง DB.students
   DB.students=(rStu.data||[]).map(s=>({
     id:s.id,
     classroomId:s.classroom_id,
@@ -550,108 +519,24 @@ async function loadFromSupabase(){
     birthdate:s.birthdate||'',
     points:s.points||0,
     avatar:s.avatar||defaultAvatar(s.code||s.name),
-    mustChange:s.must_change??true,
+    mustChange:s.must_change,
     pw:'',
     user_id:s.user_id,
-    attendance:{} // ✅ เริ่มต้นเป็น object ว่าง
+    attendance:{} // ตั้งค่าเริ่มต้นเป็น {} ก่อน
   }));
   
   // ✅ Map ข้อมูล attendance เข้า students
-  console.log('📊 Mapping attendance data...');
   (rAtt.data||[]).forEach(a=>{
     const student = DB.students.find(s=>s.id===a.student_id);
     if(student){
-      const dateStr = typeof a.date === 'string' 
-        ? a.date.split('T')[0]  // แปลง ISO string → YYYY-MM-DD
-        : a.date;
-      
-      const key = `${a.subject_id}|${dateStr}`;
+      const dateKey = a.date.split('T')[0]; // แปลง timestamp เป็น YYYY-MM-DD
+      const key = a.subject_id+'|'+dateKey;
       student.attendance[key] = a.status;
     }
   });
   
-  console.log('✅ Attendance loaded:', {
-    total_records: rAtt.data?.length || 0,
-    students_with_data: DB.students.filter(s=>Object.keys(s.attendance).length>0).length
-  });
-  
-  // Subjects
-  DB.subjects=(rSubj.data||[]).map(s=>({
-    id:s.id,
-    ownerId:s.owner_id,
-    code:s.code||'',
-    name:s.name,
-    credits:s.credits||0,
-    term:s.term||'year',
-    year:s.year||'',
-    schedule:s.schedule||[],
-    classroomIds:[]
-  }));
-  
-  // Map subjects ↔ classrooms
-  (rSubCls.data||[]).forEach(sc=>{
-    const subj=DB.subjects.find(s=>s.id===sc.subject_id);
-    if(subj&&!subj.classroomIds.includes(sc.classroom_id))subj.classroomIds.push(sc.classroom_id);
-  });
-  
-  // Assignments
-  DB.assignments=(rAsg.data||[]).map(a=>({
-    id:a.id,
-    subjectId:a.subject_id,
-    name:a.name,
-    type:a.type||'during',
-    fullScore:a.full_score||10,
-    due:a.due||'',
-    createdAt:a.created_at||'',
-    scores:{}
-  }));
-  
-  // Map scores → assignments
-  (rScore.data||[]).forEach(sc=>{
-    const asg=DB.assignments.find(a=>a.id===sc.assignment_id);
-    if(asg){
-      asg.scores[sc.student_id]={
-        value:sc.value,
-        note:sc.note||'',
-        submittedAt:sc.submitted_at||''
-      };
-    }
-  });
-  
-  // Logs
-  DB.logs=(rLog.data||[]).map(l=>({
-    at:l.at,
-    by_id:l.by_id,
-    by_name:l.by_name,
-    type:l.type,
-    detail:l.detail,
-    classroom:l.classroom||'',
-    subject:l.subject||'',
-    status:l.status||'',
-    name:l.name||''
-  }));
-  
-  // Shop items
-  DB.shopItems=(rItems.data||[]).map(i=>({
-    id:i.id,
-    type:i.type,
-    name:i.name,
-    value:i.value,
-    price:i.price||0
-  }));
-  
-  DB.studentItems=(rSItems.data||[]).map(si=>({
-    student_id:si.student_id,
-    item_id:si.item_id
-  }));
-  
-  save();
   console.log('✅ Load complete:', {
-    users: DB.users.length,
-    classrooms: DB.classrooms.length,
     students: DB.students.length,
-    subjects: DB.subjects.length,
-    assignments: DB.assignments.length,
     attendance_records: rAtt.data?.length || 0
   });
 }
@@ -675,17 +560,12 @@ async function loadAttendanceForSubject(subjectId){
   (data||[]).forEach(a=>{
     const student = DB.students.find(s=>s.id===a.student_id);
     if(student){
-      // ✅ เพิ่มบรรทัดนี้
-      student.attendance = student.attendance || {};
-      
       const dateKey = a.date.split('T')[0];
       const key = a.subject_id+'|'+dateKey;
       student.attendance[key] = a.status;
     }
   });
-  
-  console.log('✅ Attendance mapped to students');
-}
+}  
 
 function renderLoginBrand(){
   const t=document.getElementById('loginTitle');
@@ -1476,13 +1356,7 @@ async function applyMark(stu,ctx,isScan){
   if(scanMode==='att'){
     const k=attKey(scanSubjId,scanDate);
     
-    // ✅ เช็คใน memory ก่อน
-    if(stu.attendance && stu.attendance[k]){
-      beep(300,.2,'sawtooth');
-      return banner(`${stu.name} เช็กชื่อแล้ว (${ATTLABEL[stu.attendance[k]]})`,true);
-    }
-    
-    // ✅ เช็คใน Supabase (กรณีข้อมูลไม่ sync)
+    // 🔥 เช็คใน Supabase ก่อน
     const {data:existing} = await sb.from('attendance')
       .select('status')
       .eq('student_id', stu.id)
@@ -1491,71 +1365,56 @@ async function applyMark(stu,ctx,isScan){
       .maybeSingle();
     
     if(existing){
-      // ✅ อัปเดต memory ด้วยข้อมูลจาก DB
-      stu.attendance = stu.attendance || {};
-      stu.attendance[k] = existing.status;
-      
       beep(300,.2,'sawtooth');
       return banner(`${stu.name} เช็กชื่อแล้ว (${ATTLABEL[existing.status]})`,true);
     }
     
-    // ✅ บันทึกข้อมูลใหม่
-    const {data, error}=await sb.from('attendance').insert({
-      student_id: stu.id,
-      subject_id: scanSubjId,
-      date: scanDate,
-      status: manualMode
-    }).select().single();
+    // บันทึกลง Supabase
+    const {error}=await sb.from('attendance').upsert(
+      {student_id:stu.id, subject_id:scanSubjId, date:scanDate, status:manualMode},
+      {onConflict:'student_id,subject_id,date'}
+    );
     
-    if(error){
-      console.error('❌ Insert error:', error);
-      
-      // ✅ ถ้า error เพราะข้อมูลซ้ำ ให้ sync จาก DB
-      if(error.code === '23505' || error.message.includes('duplicate')){
-        const {data:synced} = await sb.from('attendance')
-          .select('status')
-          .eq('student_id', stu.id)
-          .eq('subject_id', scanSubjId)
-          .eq('date', scanDate)
-          .maybeSingle();
-        
-        if(synced){
-          stu.attendance = stu.attendance || {};
-          stu.attendance[k] = synced.status;
-          render();
-          return banner(`${stu.name} เช็กชื่อไปก่อนหน้านี้แล้ว (${ATTLABEL[synced.status]})`,false);
-        }
-      }
-      
-      return banner('บันทึกไม่สำเร็จ: '+error.message,true);
-    }
+    if(error) return banner('บันทึกไม่สำเร็จ: '+error.message,true);
     
-    console.log('✅ Saved attendance:', data);
+    // อัปเดต memory
+    stu.attendance=stu.attendance||{};
+    stu.attendance[k]=manualMode;
     
-    // ✅ อัปเดต memory ทันที
-    stu.attendance = stu.attendance || {};
-    stu.attendance[k] = manualMode;
-    
-    logAction({
-      type:'att', 
-      name:stu.name, 
-      status:manualMode,
-      subject: DB.subjects.find(x=>x.id===scanSubjId)?.name || '',
-      classroom: DB.classrooms.find(x=>x.id===stu.classroomId)?.name || ''
-    });
-    
+    logAction({type:'att', name:stu.name, status:manualMode});
     soundOK();
-    popupSuccess('เช็กชื่อสำเร็จ',[
-      `<b>${esc(stu.name)}</b>`, 
-      `สถานะ: <b>${ATTLABEL[manualMode]}</b>`
-    ]);
-    
+    popupSuccess('เช็กชื่อสำเร็จ',[`<b>${esc(stu.name)}</b>`, `สถานะ: <b>${ATTLABEL[manualMode]}</b>`]);
     if(!isScan) render();
   }
-  
-  // โค้ดรับงานเดิม
   else if(scanMode==='work'){
-    // ... (โค้ดเดิม)
+    // 🔥 รับงาน (โค้ดเดิมที่ทำงานอยู่แล้ว)
+    const a=DB.assignments.find(x=>x.id===scanAssignId);
+    if(!a) return banner('ไม่พบงาน',true);
+    
+    // เช็คว่าส่งแล้วหรือยัง
+    if(a.scores?.[stu.id]?.submittedAt){
+      beep(300,.2,'sawtooth');
+      return banner(`${stu.name} ส่งงานนี้แล้ว`,true);
+    }
+    
+    // บันทึกลง Supabase
+    const now=new Date().toISOString();
+    const {error}=await sb.from('scores').upsert(
+      {assignment_id:a.id, student_id:stu.id, submitted_at:now},
+      {onConflict:'assignment_id,student_id'}
+    );
+    
+    if(error) return banner('บันทึกไม่สำเร็จ: '+error.message,true);
+    
+    // อัปเดต memory
+    if(!a.scores) a.scores={};
+    if(!a.scores[stu.id]) a.scores[stu.id]={};
+    a.scores[stu.id].submittedAt=now;
+    
+    logAction({type:'work', name:stu.name, assignment:a.name});
+    soundOK();
+    popupSuccess('รับงานสำเร็จ',[`<b>${esc(stu.name)}</b>`, `งาน: <b>${esc(a.name)}</b>`]);
+    if(!isScan) render();
   }
 }
 
@@ -1607,7 +1466,7 @@ function renderScan(){setTopActions('');const el=document.getElementById('page-s
 
   el.innerHTML=`<div class="listcard">
       <div class="row" style="margin-bottom:10px"><button class="btn sm ${scanMode==='att'?'':'gray'}" onclick="window._pending.clear();scanMode='att';render()">เช็กชื่อ</button><button class="btn sm ${scanMode==='work'?'':'gray'}" onclick="window._pending.clear();scanMode='work';render()">รับงาน</button></div>
-      <label class="fl">รายวิชา</label><select style="margin-bottom:6px" onchange="window._pending.clear();scanSubjId=this.value;scanClsId=null;scanAssignId=null;loadAttendanceForSubject(this.value).then(()=>render())">${subjOptions}</select>
+      <label class="fl">รายวิชา</label><select style="margin-bottom:6px" onchange="window._pending.clear();scanSubjId=this.value;scanClsId=null;scanAssignId=null;render()">${subjOptions}</select>
       ${clsSelector}<div class="meta" style="margin-bottom:10px">👧 ชั้น ${esc(cls.name)} · ${studs.length} คน · ${scanMode==='att'?`เช็กแล้ว ${doneAtt}/${studs.length}`:`รับงานแล้ว ${doneWork}/${studs.length}`}</div>
       ${scanMode==='att'?`<label class="fl">วันที่</label><input type="date" value="${scanDate}" onchange="window._pending.clear();scanDate=this.value;render()">${warn}`:`<label class="fl">เลือกชิ้นงาน</label><select onchange="scanAssignId=this.value;render()">${asgs.map(a=>`<option value="${a.id}" ${a.id===scanAssignId?'selected':''}>${esc(a.name)}</option>`).join('')||'<option>— ยังไม่มีชิ้นงาน —</option>'}</select>`}
       <label class="fl" style="margin-top:6px">ป้อน "รหัสนักเรียน" แล้วกด Enter</label>
@@ -1663,18 +1522,10 @@ async function commitManual(){
     const s=DB.students.find(x=>x.id===id);
     if(!s) return;
     
-    // ✅ เช็คว่าเช็กแล้วหรือยัง
-    if(s.attendance && s.attendance[k]) {
-      console.log(`⚠️ ${s.name} already marked as ${s.attendance[k]}`);
-      return;
-    }
+    // ✅ ถ้าเช็กแล้ว ข้าม
+    if(s.attendance[k]) return;
     
-    rows.push({
-      student_id: id,
-      subject_id: scanSubjId,
-      date: scanDate,
-      status: manualMode
-    });
+    rows.push({student_id:id, subject_id:scanSubjId, date:scanDate, status:manualMode});
     toMark.push(s);
   });
   
@@ -1684,41 +1535,22 @@ async function commitManual(){
     return banner('นักเรียนที่เลือกเช็กชื่อหมดแล้ว',true);
   }
   
-  console.log(`📝 Marking ${rows.length} students...`);
-  
-   // ✅ บันทึกทั้งหมด (upsert แทน insert)
+  // 🔥 เพิ่ม .select() เพื่อดึงข้อมูลกลับมา
   const {data, error}=await sb.from('attendance')
-    .upsert(rows, {
-      onConflict: 'student_id,subject_id,date'
-    })
-    .select();
+    .upsert(rows, {onConflict:'student_id,subject_id,date'})
+    .select(); // ✅ เพิ่มบรรทัดนี้
   
-  if(error){
-    console.error('❌ Insert error:', error);
-    
-    // ถ้า error ซ้ำ ให้ sync จาก DB
-    if(error.code === '23505' || error.message.includes('duplicate')){
-      console.warn('⚠️ Duplicate detected, syncing...');
-      await loadAttendanceForSubject(scanSubjId); // ✅ โหลดใหม่
-      window._pending.clear();
-      render();
-      return banner('ข้อมูลถูกบันทึกไปแล้ว (Synced)',false);
-    }
-    
-    return banner('บันทึกไม่สำเร็จ: '+error.message,true);
-  }
+  if(error) return banner('บันทึกไม่สำเร็จ: '+error.message,true);
   
-  console.log('✅ Saved:', data);
-  
-  // ✅ อัปเดต memory ทันที
-  toMark.forEach((s, idx)=>{
-    s.attendance = s.attendance || {};
-    s.attendance[k] = manualMode;
+  // ✅ อัปเดต memory ด้วยข้อมูลจาก DB (มี id + timestamp ที่แท้จริง)
+  toMark.forEach((s, i)=>{
+    s.attendance[k]=manualMode;
     
-    if(data && data[idx]){
+    // 🔥 ถ้ามี id กลับมา เก็บไว้ใน log
+    if(data && data[i]) {
       logAction({
-        type:'att', 
-        name:s.name, 
+        type:'att',
+        name:s.name,
         status:manualMode,
         subject: DB.subjects.find(x=>x.id===scanSubjId)?.name || '',
         classroom: DB.classrooms.find(x=>x.id===s.classroomId)?.name || ''
@@ -1726,7 +1558,6 @@ async function commitManual(){
     }
   });
   
-  save(); // ✅ บันทึกลง localStorage
   window._pending.clear();
   render();
   soundDone();
@@ -1800,38 +1631,7 @@ async function commitWork(){
   render();
   soundDone();
   banner(`บันทึกการส่งงาน ${marked.length} คนเรียบร้อย`);
-} 
-
-// โหลด attendance เฉพาะ subject (ใช้เมื่อเข้าหน้าเช็กชื่อ)
-async function loadAttendanceForSubject(subjectId){
-  console.log('📊 Loading attendance for subject:', subjectId);
-  
-  const {data,error} = await sb
-    .from('attendance')
-    .select('*')
-    .eq('subject_id', subjectId);
-    
-  if(error){
-    console.warn('❌ Error loading attendance:', error);
-    return;
-  }
-  
-  console.log('✅ Loaded attendance records:', data?.length || 0);
-  
-  // Map ข้อมูลเข้า DB.students
-  (data||[]).forEach(a=>{
-    const student = DB.students.find(s=>s.id===a.student_id);
-    if(student){
-      const dateKey = typeof a.date === 'string' 
-        ? a.date.split('T')[0] 
-        : a.date;
-      const key = a.subject_id+'|'+dateKey;
-      student.attendance[key] = a.status;
-    }
-  });
-  
-  save();
-}
+}  
 /* ============================================================
    RANKING
    ============================================================ */
