@@ -487,6 +487,42 @@ async function afterAuth(user){
   await sb.auth.signOut();
   banner('ไม่พบบัญชีนี้ในระบบ',true);
 }
+// อ่านประวัติการมาเรียนทีละหน้า จนหมด
+async function fetchAllAttendance(subjectId = null) {
+  const rows = [];
+  const pageSize = 500;
+  let offset = 0;
+
+  while (true) {
+    let query = sb
+      .from('attendance')
+      .select('*')
+      .order('student_id', { ascending: true })
+      .order('subject_id', { ascending: true })
+      .order('date', { ascending: true });
+
+    if (subjectId) {
+      query = query.eq('subject_id', subjectId);
+    }
+
+    const { data, error } = await query.range(
+      offset,
+      offset + pageSize - 1
+    );
+
+    if (error) {
+      banner('โหลดประวัติการมาเรียนไม่สำเร็จ: ' + error.message, true);
+      throw error; // หยุดก่อนนำข้อมูลไม่ครบไปทับข้อมูลเดิม
+    }
+
+    if (!data?.length) break;
+
+    rows.push(...data);
+    offset += data.length;
+  }
+
+  return { data: rows, error: null };
+}
 async function loadFromSupabase(){
   console.log('🔄 Loading from Supabase...');
   
@@ -500,7 +536,7 @@ async function loadFromSupabase(){
     sb.from('subject_classrooms').select('*'),
     sb.from('assignments').select('*'),
     sb.from('scores').select('*'),
-    sb.from('attendance').select('*'), // ✅ เพิ่มบรรทัดนี้กลับมา
+    fetchAllAttendance(), // ✅ เพิ่มบรรทัดนี้กลับมา
     sb.from('logs').select('*').order('at',{ascending:false}).limit(200),
     sb.from('classroom_teachers').select('*'),
     sb.from('avatar_items').select('*'),
@@ -541,30 +577,41 @@ async function loadFromSupabase(){
   });
 }
 // โหลด attendance เฉพาะ subject
-async function loadAttendanceForSubject(subjectId){
-  console.log('📊 Loading attendance for subject:', subjectId);
-  
-  const {data,error} = await sb
-    .from('attendance')
-    .select('*')
-    .eq('subject_id', subjectId);
-    
-  if(error){
-    console.warn('❌ Error loading attendance:', error);
-    return;
+async function loadAttendanceForSubject(subjectId) {
+  try {
+    const { data } = await fetchAllAttendance(subjectId);
+
+    // ล้างเฉพาะวิชานี้ เมื่อโหลดสำเร็จครบแล้ว
+    const prefix = subjectId + '|';
+
+    DB.students.forEach(student => {
+      student.attendance = student.attendance || {};
+
+      Object.keys(student.attendance).forEach(key => {
+        if (key.startsWith(prefix)) {
+          delete student.attendance[key];
+        }
+      });
+    });
+
+    const studentsById = new Map(
+      DB.students.map(student => [student.id, student])
+    );
+
+    data.forEach(record => {
+      const student = studentsById.get(record.student_id);
+      if (!student) return;
+
+      const date = record.date.split('T')[0];
+      student.attendance[attKey(record.subject_id, date)] =
+        record.status;
+    });
+
+    save();
+    console.log('Attendance loaded:', data.length);
+  } catch (error) {
+    console.error('Attendance reload failed:', error);
   }
-  
-  console.log('✅ Loaded attendance records:', data?.length || 0);
-  
-  // Map ข้อมูลเข้า DB.students
-  (data||[]).forEach(a=>{
-    const student = DB.students.find(s=>s.id===a.student_id);
-    if(student){
-      const dateKey = a.date.split('T')[0];
-      const key = a.subject_id+'|'+dateKey;
-      student.attendance[key] = a.status;
-    }
-  });
 }  
 
 function renderLoginBrand(){
