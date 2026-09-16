@@ -5,7 +5,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 
-<title>ระบบบริหารจัดการชั้นเรียนV2</title>
+<title>ระบบบริหารจัดการชั้นเรียนV1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -311,7 +311,7 @@ function load(){try{const d=JSON.parse(localStorage.getItem(DB_KEY));if(!d)retur
   return d;}catch(e){return blankDB();}}
 function save(){localStorage.setItem(DB_KEY,JSON.stringify(DB));}
 const uid=()=>Math.random().toString(36).slice(2,9);
-const today=()=>new Date().toISOString().slice(0,10);
+const today=()=>{const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const get=t=>p.find(x=>x.type===t).value;return get('year')+'-'+get('month')+'-'+get('day');};
 const THDAYS=['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
 const THMONTHS=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const ATTLABEL={present:'มาเรียน',late:'มาสาย',absent:'ขาดเรียน',skip:'หนีเรียน',leave:'ลา/ลากิจ'};
@@ -509,6 +509,14 @@ async function doLogin(){
 
 // ดึงโปรไฟล์/บทบาทจาก Supabase แล้วเข้าแอป
 async function afterAuth(user){
+  try{return await afterAuthLoaded(user);}catch(error){
+    console.error('โหลดข้อมูลเข้าสู่ระบบไม่สำเร็จ:',error);
+    session=null;CURRENT_USER=null;
+    document.getElementById('loginScreen').classList.remove('hidden');
+    banner('โหลดข้อมูลไม่สำเร็จ: '+error.message,true);
+  }
+}
+async function afterAuthLoaded(user){
   const {data:prof}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
   if(prof){
     if(!prof.active){await sb.auth.signOut();return banner('บัญชีถูกระงับ',true);}
@@ -575,30 +583,80 @@ async function fetchAllAttendance(subjectId = null) {
 
   return { data: rows, error: null };
 }
+async function readAllRows(table, keys) {
+  let offset=0;const rows=[];
+  while(true){
+    let query=sb.from(table).select('*');
+    for(const key of keys)query=query.order(key,{ascending:true});
+    // Limit sensitive student results to the signed-in student's own records.
+    if(session?.role==='student'){
+      if(table==='students')query=query.eq('id',session.studentId);
+      if(['attendance','scores','student_items'].includes(table))query=query.eq('student_id',session.studentId);
+    }
+    const {data,error}=await query.range(offset,offset+499);
+    if(error)throw new Error(table+': '+error.message);
+    if(!data?.length)break;rows.push(...data);offset+=data.length;
+  }
+  return {data:rows,error:null};
+}
 async function loadFromSupabase(){
   console.log('🔄 Loading from Supabase...');
   
-  // ✅ เพิ่ม rAtt กลับมา
   const [rSet,rProf,rCls,rStu,rSubj,rSubCls,rAsg,rScore,rAtt,rLog,rCT,rItems,rSItems]=await Promise.all([
-    sb.from('settings').select('*'),
-    sb.from('profiles').select('*'),
-    sb.from('classrooms').select('*'),
-    sb.from('students').select('*'),
-    sb.from('subjects').select('*'),
-    sb.from('subject_classrooms').select('*'),
-    sb.from('assignments').select('*'),
-    sb.from('scores').select('*'),
-    fetchAllAttendance(), // ✅ เพิ่มบรรทัดนี้กลับมา
+    sb.from('settings').select('*').eq('id',settingsRowId),
+    readAllRows('profiles',['id']),
+    readAllRows('classrooms',['id']),
+    readAllRows('students',['id']),
+    readAllRows('subjects',['id']),
+    readAllRows('subject_classrooms',['subject_id', 'classroom_id']),
+    readAllRows('assignments',['id']),
+    readAllRows('scores',['assignment_id', 'student_id']),
+    readAllRows('attendance',['student_id', 'subject_id', 'date']), // ✅ เพิ่มบรรทัดนี้
     sb.from('logs').select('*').order('at',{ascending:false}).limit(200),
-    sb.from('classroom_teachers').select('*'),
-    sb.from('avatar_items').select('*'),
-    sb.from('student_items').select('*'),
+    readAllRows('classroom_teachers',['classroom_id', 'teacher_id']),
+    readAllRows('avatar_items',['id']),
+    readAllRows('student_items',['id']),
   ]);
   
-  // ... (โค้ดเดิม)
+  const results={settings:rSet,profiles:rProf,classrooms:rCls,students:rStu,subjects:rSubj,subject_classrooms:rSubCls,assignments:rAsg,scores:rScore,attendance:rAtt,logs:rLog,classroom_teachers:rCT,avatar_items:rItems,student_items:rSItems};
+  for(const [table,result] of Object.entries(results)){if(result.error)throw new Error(table+': '+result.error.message);}
+  const next=blankDB();
+  // Settings
+  if(rSet.data?.[0]){
+    const s=rSet.data[0];
+    next.systemName=s.system_name||'ระบบเช็กชื่อห้องเรียน';
+    next.logo=s.logo||'';
+    next.school=s.school||'';
+    next.weights=s.weights||{during:70,final:30};
+  }
   
-  // ✅ เพิ่มส่วนนี้หลังสร้าง DB.students
-  DB.students=(rStu.data||[]).map(s=>({
+  // Users/Profiles
+  next.users=(rProf.data||[]).map(p=>({
+    id:p.id,
+    username:p.username,
+    name:p.name,
+    role:p.role||'teacher',
+    active:p.active??true
+  }));
+  
+  // Classrooms
+  next.classrooms=(rCls.data||[]).map(c=>({
+    id:c.id,
+    ownerId:c.owner_id,
+    name:c.name,
+    level:c.level||'',
+    year:c.year||'',
+    teacherIds:[]
+  }));
+  
+  // Map teachers → classrooms
+  (rCT.data||[]).forEach(ct=>{
+    const cls=next.classrooms.find(c=>c.id===ct.classroom_id);
+    if(cls&&!cls.teacherIds.includes(ct.teacher_id))cls.teacherIds.push(ct.teacher_id);
+  });
+  
+  // Students (สร้างโครงสร้างพื้นฐานก่อน)
+  next.students=(rStu.data||[]).map(s=>({
     id:s.id,
     classroomId:s.classroom_id,
     number:s.number||'',
@@ -607,24 +665,115 @@ async function loadFromSupabase(){
     birthdate:s.birthdate||'',
     points:s.points||0,
     avatar:s.avatar||defaultAvatar(s.code||s.name),
-    mustChange:s.must_change,
+    mustChange:s.must_change??true,
     pw:'',
     user_id:s.user_id,
-    attendance:{} // ตั้งค่าเริ่มต้นเป็น {} ก่อน
+    attendance:{} // ✅ เริ่มต้นเป็น object ว่าง
   }));
   
   // ✅ Map ข้อมูล attendance เข้า students
+  console.log('📊 Mapping attendance data...');
   (rAtt.data||[]).forEach(a=>{
-    const student = DB.students.find(s=>s.id===a.student_id);
+    const student = next.students.find(s=>s.id===a.student_id);
     if(student){
-      const dateKey = a.date.split('T')[0]; // แปลง timestamp เป็น YYYY-MM-DD
-      const key = a.subject_id+'|'+dateKey;
+      const dateStr = typeof a.date === 'string' 
+        ? a.date.split('T')[0]  // แปลง ISO string → YYYY-MM-DD
+        : a.date;
+      
+      const key = `${a.subject_id}|${dateStr}`;
       student.attendance[key] = a.status;
     }
   });
   
+  console.log('✅ Attendance loaded:', {
+    total_records: rAtt.data?.length || 0,
+    students_with_data: next.students.filter(s=>Object.keys(s.attendance).length>0).length
+  });
+  
+  // Subjects
+  next.subjects=(rSubj.data||[]).map(s=>({
+    id:s.id,
+    ownerId:s.owner_id,
+    code:s.code||'',
+    name:s.name,
+    credits:s.credits||0,
+    term:s.term||'year',
+    year:s.year||'',
+    schedule:s.schedule||[],
+    classroomIds:[]
+  }));
+  
+  // Map subjects ↔ classrooms
+  (rSubCls.data||[]).forEach(sc=>{
+    const subj=next.subjects.find(s=>s.id===sc.subject_id);
+    if(subj&&!subj.classroomIds.includes(sc.classroom_id))subj.classroomIds.push(sc.classroom_id);
+  });
+  
+  // Assignments
+  next.assignments=(rAsg.data||[]).map(a=>({
+    id:a.id,
+    subjectId:a.subject_id,
+    name:a.name,
+    type:a.type||'during',
+    fullScore:a.full_score||10,
+    due:a.due||'',
+    createdAt:a.created_at||'',
+    scores:{}
+  }));
+  
+  // Map scores → assignments
+  (rScore.data||[]).forEach(sc=>{
+    const asg=next.assignments.find(a=>a.id===sc.assignment_id);
+    if(asg){
+      asg.scores[sc.student_id]={
+        value:sc.value,
+        note:sc.note||'',
+        submittedAt:sc.submitted_at||''
+      };
+    }
+  });
+  
+  // Logs
+  next.logs=(rLog.data||[]).map(l=>({
+    at:l.at,
+    by_id:l.by_id,
+    by_name:l.by_name,
+    type:l.type,
+    detail:l.detail,
+    classroom:l.classroom||'',
+    subject:l.subject||'',
+    status:l.status||'',
+    name:l.name||''
+  }));
+  
+  // Shop items
+  next.shopItems=(rItems.data||[]).map(i=>({
+    id:i.id,
+    type:i.type,
+    name:i.name,
+    value:i.value,
+    price:i.price||0
+  }));
+  
+  next.studentItems=(rSItems.data||[]).map(si=>({
+    student_id:si.student_id,
+    item_id:si.item_id
+  }));
+  
+  if(session?.role==='student'){
+    const own=next.students.find(s=>s.id===session.studentId);
+    if(!own)throw new Error('ไม่พบข้อมูลนักเรียนของบัญชีนี้ กรุณาตรวจ students.user_id และสิทธิ์อ่าน');
+    if(!next.classrooms.some(c=>c.id===own.classroomId))throw new Error('อ่านห้องเรียนของนักเรียนไม่ได้ กรุณาให้ผู้ดูแลตรวจสิทธิ์ SELECT ของ classrooms');
+  }
+  DB=next;
+  try{save();}catch(e){console.warn('Local cache unavailable',e);}
+  renderLoginBrand();
   console.log('✅ Load complete:', {
-    students: DB.students.length,
+    users: next.users.length,
+    classrooms: next.classrooms.length,
+    students: next.students.length,
+    subjects: next.subjects.length,
+    assignments: next.assignments.length,
     attendance_records: rAtt.data?.length || 0
   });
 }
@@ -675,7 +824,13 @@ function renderLoginBrand(){
   
 // boot: เช็คว่ามี session ค้างอยู่ไหม
 (async function boot(){
+  DB.systemName='ระบบเช็กชื่อห้องเรียน';DB.logo='';DB.school='';
   renderLoginBrand();
+  try{
+    const {data:brand,error}=await sb.from('settings').select('system_name,logo,school').eq('id',settingsRowId).maybeSingle();
+    if(error)throw error;
+    if(brand){DB.systemName=brand.system_name||'ระบบเช็กชื่อห้องเรียน';DB.logo=brand.logo||'';DB.school=brand.school||'';renderLoginBrand();}
+  }catch(error){console.warn('โหลดแบรนด์ไม่สำเร็จ:',error);}
   const {data}=await sb.auth.getSession();
   if(data?.session?.user){await afterAuth(data.session.user);}
 })();
@@ -1435,9 +1590,8 @@ function startScanner(){
       if(code===lastCode&&now-lastAt<2500)return;   // กันยิงซ้ำรหัสเดิมรัว ๆ
       lastCode=code;lastAt=now;
       const fresh=scanCtx();                          // ดึง context ล่าสุด
-      const stu=fresh.studs.find(s=>String(s.code)===code);
-      if(stu){applyMark(stu,fresh,true);}        // ← เพิ่ม true
-      else{beep(300,.2,'sawtooth');banner('ไม่พบรหัส '+code+' ในห้องนี้',true);}
+      submitScan(code,fresh);
+
     },
     ()=>{}   // เพิกเฉย error ระหว่างเฟรมที่อ่านไม่ออก
   ).catch(()=>banner('เปิดกล้องไม่ได้ ตรวจสอบสิทธิ์การใช้กล้อง',true));
@@ -1448,82 +1602,104 @@ function stopScanner(){
   try{s.stop().then(()=>s.clear()).catch(()=>{});}catch(e){}
 }
 
-async function applyMark(stu,ctx,isScan){
-  if(scanMode==='att'){
-    const k=attKey(scanSubjId,scanDate);
-    
-    // 🔥 เช็คใน Supabase ก่อน
-    const {data:existing} = await sb.from('attendance')
-      .select('status')
-      .eq('student_id', stu.id)
-      .eq('subject_id', scanSubjId)
-      .eq('date', scanDate)
-      .maybeSingle();
-    
-    if(existing){
-      beep(300,.2,'sawtooth');
-      return banner(`${stu.name} เช็กชื่อแล้ว (${ATTLABEL[existing.status]})`,true);
-    }
-    
-    // บันทึกลง Supabase
-    const {error}=await sb.from('attendance').upsert(
-      {student_id:stu.id, subject_id:scanSubjId, date:scanDate, status:manualMode},
-      {onConflict:'student_id,subject_id,date'}
-    );
-    
-    if(error) return banner('บันทึกไม่สำเร็จ: '+error.message,true);
-    
-    // อัปเดต memory
-    stu.attendance=stu.attendance||{};
-    stu.attendance[k]=manualMode;
-    
-    logAction({type:'att', name:stu.name, status:manualMode});
-    soundOK();
-    popupSuccess('เช็กชื่อสำเร็จ',[`<b>${esc(stu.name)}</b>`, `สถานะ: <b>${ATTLABEL[manualMode]}</b>`]);
-    if(!isScan) render();
-  }
-  else if(scanMode==='work'){
-    // 🔥 รับงาน (โค้ดเดิมที่ทำงานอยู่แล้ว)
-    const a=DB.assignments.find(x=>x.id===scanAssignId);
-    if(!a) return banner('ไม่พบงาน',true);
-    
-    // เช็คว่าส่งแล้วหรือยัง
-    if(a.scores?.[stu.id]?.submittedAt){
-      beep(300,.2,'sawtooth');
-      return banner(`${stu.name} ส่งงานนี้แล้ว`,true);
-    }
-    
-    // บันทึกลง Supabase
-    const now=new Date().toISOString();
-    const {error}=await sb.from('scores').upsert(
-      {assignment_id:a.id, student_id:stu.id, submitted_at:now},
-      {onConflict:'assignment_id,student_id'}
-    );
-    
-    if(error) return banner('บันทึกไม่สำเร็จ: '+error.message,true);
-    
-    // อัปเดต memory
-    if(!a.scores) a.scores={};
-    if(!a.scores[stu.id]) a.scores[stu.id]={};
-    a.scores[stu.id].submittedAt=now;
-    
-    logAction({type:'work', name:stu.name, assignment:a.name});
-    soundOK();
-    popupSuccess('รับงานสำเร็จ',[`<b>${esc(stu.name)}</b>`, `งาน: <b>${esc(a.name)}</b>`]);
-    if(!isScan) render();
-  }
+// Continuous scanner: preserve input and capture context before asynchronous work.
+let scanQueue = [], scanBusy = false, scanResults = [], scanCurrent = null;
+const scanTime = iso => new Date(iso).toLocaleString('th-TH', {
+  timeZone:'Asia/Bangkok', year:'numeric', month:'long', day:'numeric',
+  hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false
+});
+function focusScanCode() {
+  const input=document.getElementById('codeIn');
+  if(currentTab!=='scan'||!input||document.querySelector('.modal-bg.open,.popup-bg.open'))return;
+  const active=document.activeElement;
+  if(active && active!==input && active.matches('input,select,textarea,[contenteditable="true"]'))return;
+  input.focus({preventScroll:true});
 }
-
-  
-function markByCode(){
-  const ctx=scanCtx();if(!ctx||!ctx.cls)return banner('เลือกห้องและรายวิชาก่อน',true);
-  const inp=document.getElementById('codeIn');const code=(inp?.value||'').trim();
-  if(!code)return;
+function scanResultHTML(r) {
+  const colors={pending:['#eff6ff','#1e40af','⏳ กำลังบันทึก'],success:['#ecfdf5','#065f46','✓ บันทึกสำเร็จ'],duplicate:['#fffbeb','#92400e','⚠ มีรายการแล้ว'],error:['#fff1f2','#9f1239','✕ บันทึกไม่สำเร็จ']};
+  const [bg,fg,title]=colors[r.state];
+  return `<section style="background:${bg};color:${fg};border:2px solid ${fg};border-radius:18px;padding:20px;overflow-wrap:anywhere">
+    <div style="font-size:19px;font-weight:700">${title}</div>
+    <div style="font-size:clamp(24px,4vw,34px);font-weight:700;line-height:1.4;margin:8px 0">${esc(r.name)}</div>
+    <div style="font-size:17px">ชั้น ${esc(r.classroom)} · เลขที่ ${esc(r.number)} · รหัส ${esc(r.code)}</div>
+    <div style="font-size:21px;font-weight:700;margin-top:10px">${r.mode==='work'?'ชื่องาน: '+esc(r.assignmentName):'สถานะ: '+esc(ATTLABEL[r.status]||r.status)}</div>
+    <div style="font-size:17px">วิชา: ${esc(r.subjectName)}</div>
+    ${r.mode==='att'?`<div>วันที่เช็กชื่อ: ${esc(r.date)}</div>`:''}
+    <div style="margin-top:8px">${r.state==='success'?'วันเวลาที่บันทึก':'เวลาตรวจสอบ'}: ${esc(scanTime(r.at))}</div>
+    ${r.message?`<div style="font-weight:600;margin-top:8px">${esc(r.message)}</div>`:''}
+  </section>`;
+}
+function paintScanResult() {
+  const box=document.getElementById('scanResult');if(!box)return;
+  box.innerHTML=(scanCurrent?scanResultHTML(scanCurrent):'<div style="padding:20px;background:#eff6ff;border-radius:16px;font-size:20px;font-weight:700">พร้อมสแกนบาร์โค้ด / QR</div>')+
+    `<p style="font-weight:600;color:#1e40af">พร้อมรับรหัสคนถัดไป · รอดำเนินการ ${scanQueue.length} รายการ</p>`+
+    (scanResults.length?`<details><summary>ผลการสแกนก่อนหน้า ${scanResults.length} รายการ</summary>${scanResults.map(scanResultHTML).join('')}</details>`:'');
+}
+function setScanResult(r, state, message='') {
+  scanCurrent={...r,state,message,at:new Date().toISOString()};paintScanResult();
+}
+function submitScan(code,ctx) {
+  if(!ctx?.cls||!ctx.sub)return banner('เลือกห้องและรายวิชาก่อน',true);
   const stu=ctx.studs.find(s=>String(s.code)===code);
-  if(!stu){beep(300,.2,'sawtooth');return banner('ไม่พบรหัส '+code+' ในห้องนี้',true);}
-  if(inp)inp.value='';
-  applyMark(stu,ctx,false);
+  const a=DB.assignments.find(x=>x.id===scanAssignId);
+  const job={studentId:stu?.id,name:stu?.name||'ไม่พบรหัสนักเรียน',number:stu?.number||'—',code,
+    classroom:ctx.cls.name,subjectId:ctx.sub.id,subjectName:ctx.sub.name,
+    mode:scanMode,date:scanDate,status:manualMode,assignmentId:a?.id,assignmentName:a?.name||'ยังไม่ได้เลือกงาน',
+    userId:session?.id};
+
+  if(!stu){setScanResult(job,'error','ไม่พบรหัสนี้ในห้องที่เลือก');beep(300,.2,'sawtooth');return;}
+  if(job.mode==='work'&&(!a||a.subjectId!==ctx.sub.id)){setScanResult(job,'error','กรุณาเลือกชิ้นงานของวิชานี้');return;}
+  scanQueue.push(job);paintScanResult();drainScanQueue();
 }
+async function applyMark(stu,ctx,isScan){submitScan(String(stu.code),ctx);}
+async function drainScanQueue(){
+  if(scanBusy)return;scanBusy=true;
+  try { while(scanQueue.length){
+    const j=scanQueue.shift();
+    if(!session||session.id!==j.userId){scanQueue=[];break;}
+    if(scanCurrent&&scanCurrent.state!=='pending'){
+      if(scanResults[0]!==scanCurrent)scanResults.unshift(scanCurrent);
+      scanResults=scanResults.slice(0,5);
+    }
+    setScanResult(j,'pending');
+    try{
+      const stu=DB.students.find(s=>s.id===j.studentId);
+      if(!stu)throw new Error('ไม่พบข้อมูลนักเรียน');
+      if(j.mode==='att'){
+        const filter={student_id:j.studentId,subject_id:j.subjectId,date:j.date};
+        const {data:old,error:readError}=await sb.from('attendance').select('*').match(filter).maybeSingle();
+        if(readError)throw readError;
+        if(old){stu.attendance=stu.attendance||{};stu.attendance[attKey(j.subjectId,j.date)]=old.status;setScanResult({...j,status:old.status},'duplicate','เช็กชื่อแล้ว ไม่มีการบันทึกทับ');beep(500,.1);continue;}
+        const {data:row,error}=await sb.from('attendance').insert({...filter,status:j.status}).select().single();
+        if(error)throw error;
+        stu.attendance=stu.attendance||{};stu.attendance[attKey(j.subjectId,j.date)]=row.status;
+      }else{
+        const filter={assignment_id:j.assignmentId,student_id:j.studentId};
+        const {data:old,error:readError}=await sb.from('scores').select('*').match(filter).maybeSingle();
+        if(readError)throw readError;
+        if(old?.submitted_at){setScanResult(j,'duplicate','ส่งงานนี้แล้ว เมื่อ '+scanTime(old.submitted_at));beep(500,.1);continue;}
+        const now=new Date().toISOString();
+        // Update only submission time: preserve existing marks and notes.
+        const query=old?sb.from('scores').update({submitted_at:now}).match(filter).is('submitted_at',null):sb.from('scores').insert({...filter,submitted_at:now});
+        const {data:row,error}=await query.select().maybeSingle();
+        if(error)throw error;
+        if(!row)throw new Error('รายการถูกเปลี่ยนจากเครื่องอื่น กรุณาสแกนตรวจสอบอีกครั้ง');
+        const a=DB.assignments.find(x=>x.id===j.assignmentId);
+        if(a){a.scores=a.scores||{};a.scores[j.studentId]={value:row.value,note:row.note||'',submittedAt:row.submitted_at};}
+      }
+      setScanResult(j,'success');soundOK();
+      try{save();}catch(e){console.warn('Local cache unavailable',e);}
+      // Audit errors must not turn a successful submission into a failed one.
+      Promise.resolve(logAction({type:j.mode,name:j.name,classroom:j.classroom,subject:j.subjectName,status:j.mode==='att'?j.status:'',detail:j.mode==='work'?'รับงาน: '+j.assignmentName:ATTLABEL[j.status]+' · '+j.date})).catch(e=>console.warn('Audit log failed',e));
+    }catch(e){setScanResult(j,'error',e.code==='23505'?'มีรายการจากเครื่องอื่นแล้ว กรุณาสแกนอีกครั้งเพื่อตรวจสอบ':e.message||'เชื่อมต่อไม่สำเร็จ กรุณาสแกนอีกครั้ง');beep(300,.2,'sawtooth');}
+  }}finally{scanBusy=false;paintScanResult();}
+}
+function markByCode(){
+  const inp=document.getElementById('codeIn');const code=(inp?.value||'').trim();
+  if(!code)return;if(inp)inp.value='';
+  submitScan(code,scanCtx());focusScanCode();
+}
+window.addEventListener('beforeunload',event=>{if(scanBusy||scanQueue.length){event.preventDefault();event.returnValue='';}});
 
 function renderScan(){setTopActions('');const el=document.getElementById('page-scan');const ctx=scanCtx();
   if(!ctx||!ctx.cls){el.innerHTML=`<div class="empty"><div class="big">📚</div>ยังไม่มีรายวิชา<br>สร้างห้องและรายวิชาก่อน<br><button class="btn" onclick="go('class')">ไปหน้าชั้นเรียน</button></div>`;return;}
@@ -1571,8 +1747,10 @@ function renderScan(){setTopActions('');const el=document.getElementById('page-s
       <label class="fl">รายวิชา</label><select style="margin-bottom:6px" onchange="window._pending.clear();scanSubjId=this.value;scanClsId=null;scanAssignId=null;render()">${subjOptions}</select>
       ${clsSelector}<div class="meta" style="margin-bottom:10px">👧 ชั้น ${esc(cls.name)} · ${studs.length} คน · ${scanMode==='att'?`เช็กแล้ว ${doneAtt}/${studs.length}`:`รับงานแล้ว ${doneWork}/${studs.length}`}</div>
       ${scanMode==='att'?`<label class="fl">วันที่</label><input type="date" value="${scanDate}" onchange="window._pending.clear();scanDate=this.value;render()">${warn}`:`<label class="fl">เลือกชิ้นงาน</label><select onchange="scanAssignId=this.value;render()">${asgs.map(a=>`<option value="${a.id}" ${a.id===scanAssignId?'selected':''}>${esc(a.name)}</option>`).join('')||'<option>— ยังไม่มีชิ้นงาน —</option>'}</select>`}
+      <div id="scanResult" role="status" aria-live="polite" aria-atomic="true"></div>
       <label class="fl" style="margin-top:6px">ป้อน "รหัสนักเรียน" แล้วกด Enter</label>
-      <div class="row"><input id="codeIn" placeholder="เช่น 12345" style="margin:0;flex:1" onkeydown="if(event.key==='Enter')markByCode()"><button class="btn green" onclick="markByCode()">บันทึก</button></div>
+      <div class="row"><input id="codeIn" placeholder="เช่น 12345" style="margin:0;flex:1" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();markByCode()}"><button class="btn green" onclick="markByCode()">บันทึก</button></div>
+      <button class="btn sm gray" style="margin-top:10px" onclick="if(!scanBusy){stopScanner();render()}">อัปเดตรายชื่อด้านล่าง</button>
       <div id="reader" style="border-radius:14px;overflow:hidden;margin-top:12px"></div>
       <div class="row" style="margin-top:10px"><button class="btn" onclick="startScanner()">เปิดกล้องยิง QR</button><button class="btn gray" onclick="stopScanner();render()">หยุด</button></div></div>
         ${scanMode==='att'
@@ -1583,7 +1761,8 @@ function renderScan(){setTopActions('');const el=document.getElementById('page-s
       :`<div class="listcard"><h3>👆 รับงานหลายคน</h3>
           <p class="meta" style="margin:4px 0 10px">1) เลือกชิ้นงานด้านบน → 2) แตะเลือกนักเรียน (เลือกได้หลายคน) → 3) กดบันทึก · คนที่ส่งแล้วจะล็อก 🔒 แตะซ้ำเพื่อยกเลิก</p>
           ${workBlock}</div>`}
-    <div class="listcard"><h3>🕒 ประวัติล่าสุด</h3>${recent.length?recent.map(l=>`<div class="logrow"><span class="ld" style="background:${l.status?ATTCOLOR[l.status]:'var(--blue)'}"></span><div style="flex:1"><b>${esc(l.name)}</b><div class="meta">${esc(l.subject||'')} · ${esc(l.detail||'')}</div></div><span class="meta">${thDateTime(l.at)}</span></div>`).join(''):'<p class="meta">ยังไม่มีรายการ</p>'}</div>`;}
+    <div class="listcard"><h3>🕒 ประวัติล่าสุด</h3>${recent.length?recent.map(l=>`<div class="logrow"><span class="ld" style="background:${l.status?ATTCOLOR[l.status]:'var(--blue)'}"></span><div style="flex:1"><b>${esc(l.name)}</b><div class="meta">${esc(l.subject||'')} · ${esc(l.detail||'')}</div></div><span class="meta">${thDateTime(l.at)}</span></div>`).join(''):'<p class="meta">ยังไม่มีรายการ</p>'}</div>`;paintScanResult();requestAnimationFrame(focusScanCode);}
+
 
 async function undoAtt(id){const ctx=scanCtx();if(!ctx)return;
   const s=DB.students.find(x=>x.id===id);if(!s)return;
@@ -2234,7 +2413,7 @@ function renderPortal(){const el=document.getElementById('page-portal');
       <div class="stat s3"><div class="v">${at.rate}%</div><div class="k">เข้าเรียนรวม</div></div>
       <div class="stat s4"><div class="v">${stu.points||0}</div><div class="k">แต้มสะสม</div></div>
     </div>
-    <div class="listcard"><h3>🏆 อันดับในห้อง (${classStuds.length} คน)</h3><div class="row" style="margin-top:6px"><div style="flex:1;text-align:center;background:#f6f4ff;border-radius:14px;padding:12px"><div style="font-size:24px;font-weight:700;color:var(--purple)">#${rkScore}</div><div class="meta">ด้านคะแนน</div></div><div style="flex:1;text-align:center;background:#f0fbf4;border-radius:14px;padding:12px"><div style="font-size:24px;font-weight:700;color:var(--green)">#${rkAtt}</div><div class="meta">ด้านเข้าเรียน</div></div></div></div>
+    <div class="listcard"><h3>ข้อมูลส่วนตัว</h3><p class="meta">หน้านี้แสดงคะแนนและการมาเรียนของคุณ อันดับทั้งห้องให้ตรวจสอบกับครูประจำชั้น</p></div>
     <div class="listcard"><h3>📅 สรุปการเข้าเรียน</h3>
     ${attSelHTML}
     <div class="meta" style="margin-bottom:8px">${attScope} · จากทั้งหมด ${at2.tot} ครั้ง · อัตราเข้าเรียน <b>${at2.rate}%</b></div>
@@ -2420,7 +2599,8 @@ async function pushSettings(){
   const {error}=await sb.from('settings').upsert(
     {id:settingsRowId,system_name:DB.systemName,logo:DB.logo,school:DB.school,weights:DB.weights},
     {onConflict:'id'});
-  if(error)banner('บันทึกการตั้งค่าไม่สำเร็จ: '+error.message,true);
+  if(error){banner('บันทึกการตั้งค่าไม่สำเร็จ: '+error.message,true);throw error;}
+  try{save();}catch(e){console.warn('Local cache unavailable',e);}
 }
 
 /* ---------- SETTINGS ACTIONS ---------- */
