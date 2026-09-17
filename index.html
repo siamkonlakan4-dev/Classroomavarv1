@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
@@ -2066,7 +2067,7 @@ function renderReport(){setTopActions('');const el=document.getElementById('page
         :repMode==='work'
         ?`<label class="fl">มุมมอง</label><div class="row" style="margin-bottom:8px"><button class="btn sm ${repWorkView==='summary'?'':'gray'}" onclick="repWorkView='summary';repChange()">สรุปรวม</button><button class="btn sm ${repWorkView==='history'?'':'gray'}" onclick="repWorkView='history';repChange()">ประวัติการส่ง</button></div>`
         :`<p class="meta" style="margin:2px 0 6px">แสดงคะแนนเก็บ/ปลายภาค รวม และเกรด · น้ำหนัก ${gradeCaps().during}/${gradeCaps().final} (แก้ที่หน้าตั้งค่า) · เลือกรายวิชาเดียวหรือทุกวิชาได้</p>`}
-      <div class="row" style="margin-top:6px"><button class="btn" onclick="showReport()">📊 แสดงผล</button><button class="btn purple" onclick="printReport()">🖨 ส่งออก PDF</button></div></div>
+      <div class="row" style="margin-top:6px"><button class="btn" onclick="showReport()">📊 แสดงผล</button><button class="btn purple" onclick="printReport()">🖨 ส่งออก PDF</button><button class="btn green" onclick="exportReportExcel()">📗 ส่งออก Excel</button></div></div>
     ${repShown?`<div>${buildReportHTML(cls,subs,studs)}</div>`:`<div class="empty"><div class="big">📊</div>เลือกตัวกรอง แล้วกด "แสดงผล"</div>`}`;}
 function buildReportHTML(cls,subs,studs){
   if(repMode==='grade')return gradeReportHTML(cls,subs,studs);
@@ -2092,6 +2093,122 @@ function buildReportHTML(cls,subs,studs){
   const subList=repSubj==='all'?subs.map(s=>s.id):[repSubj];const asgs=DB.assignments.filter(a=>subList.includes(a.subjectId));const subOf=stu=>asgs.filter(a=>a.scores?.[stu.id]?.submittedAt).length;const totalA=asgs.length;
   return`<div class="listcard"><h3>📦 สรุปการส่งงาน</h3><div class="meta" style="margin-bottom:6px">${esc(cls.name)} · ${totalA} ชิ้นงาน</div>${studs.map(s=>{const n=subOf(s);const pct=totalA?Math.round(n/totalA*100):0;return`<div style="margin:9px 0"><div class="row"><span style="font-size:13px">${s.number}. ${esc(s.name)}</span><div class="spacer"></div><b>${n}/${totalA}</b></div><div style="background:var(--sep);border-radius:8px;height:9px;margin-top:4px"><div style="width:${pct}%;height:100%;background:var(--gGreen);border-radius:8px"></div></div></div>`;}).join('')}</div>`;
 }
+
+/* ---------- ส่งออกรายงานเป็น Excel (.xlsx) ---------- */
+function excelSafeName(text, fallback='รายงาน'){
+  return String(text||fallback).replace(/[\\/:*?"<>|\[\]]/g,'-').replace(/\s+/g,' ').trim().slice(0,80)||fallback;
+}
+function excelDateTime(value){
+  if(!value)return'';
+  const d=new Date(value);
+  return Number.isNaN(d.getTime())?String(value):d;
+}
+function excelAddSheet(wb,name,rows,widths){
+  const ws=XLSX.utils.aoa_to_sheet(rows,{cellDates:true});
+  ws['!cols']=(widths||[]).map(w=>({wch:w}));
+  if(rows.length>1&&rows[0]?.length){
+    ws['!autofilter']={ref:XLSX.utils.encode_range({r:0,c:0},{r:rows.length-1,c:rows[0].length-1})};
+  }
+  XLSX.utils.book_append_sheet(wb,ws,excelSafeName(name,'ข้อมูล').slice(0,31));
+}
+function excelInfoRows(title,cls,subjectLabel,periodLabel){
+  return [
+    ['ชื่อระบบ',DB.systemName||''],
+    ['สถานศึกษา',DB.school||''],
+    ['รายงาน',title],
+    ['ชั้นเรียน',cls?.name||''],
+    ['รายวิชา',subjectLabel],
+    ['ช่วงข้อมูล',periodLabel||'-'],
+    ['ผู้ส่งออก',session?.name||''],
+    ['วันเวลาที่ส่งออก',new Date()],
+    [],
+    ['การลงชื่อยืนยัน','ชื่อ-นามสกุล','วันที่'],
+    ['ผู้พิมพ์ข้อมูล',session?.name||'',''],
+    ['ครูประจำชั้น','',''],
+    ['หัวหน้ากลุ่มงานวิชาการ','',''],
+    ['ผู้อำนวยการ/รองผู้อำนวยการ','','']
+  ];
+}
+function buildAttendanceExcel(wb,cls,subs,studs){
+  const selected=repSubj==='all'?subs:subs.filter(s=>s.id===repSubj);
+  const subIds=selected.map(s=>s.id);
+  const subLabel=repSubj==='all'?'ทุกวิชา':selected[0]?.name||'-';
+  const rng=reportRange();
+  const rows=[];
+  if(repPeriod==='day'){
+    rows.push(['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน','รายวิชา','วันที่','สถานะ']);
+    studs.forEach(stu=>{
+      if(repSubj==='all'){
+        selected.forEach(sub=>{
+          const status=stu.attendance?.[attKey(sub.id,repDate)]||'';
+          rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',sub.name||'',repDate,status?ATTLABEL[status]||status:'ยังไม่เช็ก']);
+        });
+      }else{
+        const sub=selected[0];const status=stu.attendance?.[attKey(sub?.id,repDate)]||'';
+        rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',sub?.name||'',repDate,status?ATTLABEL[status]||status:'ยังไม่เช็ก']);
+      }
+    });
+    excelAddSheet(wb,'รายละเอียดการมาเรียน',rows,[10,16,28,14,26,14,16]);
+  }else{
+    rows.push(['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน','มาเรียน','มาสาย','ขาดเรียน','หนีเรียน','ลา/ลากิจ','รวมครั้ง','ร้อยละเวลาเรียน']);
+    studs.forEach(stu=>{const a=attAgg(stu,subIds,rng.start,rng.end);rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',a.present,a.late,a.absent,a.skip,a.leave,a.tot,a.attendPct/100]);});
+    excelAddSheet(wb,'สรุปการมาเรียน',rows,[10,16,28,14,10,10,10,10,10,10,18]);
+    const ws=wb.Sheets[wb.SheetNames[wb.SheetNames.length-1]];
+    for(let r=2;r<=rows.length;r++){const cell=ws['K'+r];if(cell)cell.z='0%';}
+  }
+  excelAddSheet(wb,'ข้อมูลรายงาน',excelInfoRows('รายงานการมาเรียน',cls,subLabel,rng.label),[25,38,20]);
+  return `รายงานการมาเรียน_${cls.name}_${rng.start}_ถึง_${rng.end}`;
+}
+function buildWorkExcel(wb,cls,subs,studs){
+  const selected=repSubj==='all'?subs:subs.filter(s=>s.id===repSubj);
+  const subIds=selected.map(s=>s.id);
+  const assignments=DB.assignments.filter(a=>subIds.includes(a.subjectId));
+  const subLabel=repSubj==='all'?'ทุกวิชา':selected[0]?.name||'-';
+  if(repWorkView==='history'){
+    const rows=[['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน','รายวิชา','ชื่องาน','ประเภทงาน','คะแนนเต็ม','สถานะส่ง','วันเวลาที่ส่ง','คะแนน','หมายเหตุ']];
+    assignments.forEach(a=>{const sub=subjById(a.subjectId);studs.forEach(stu=>{const score=a.scores?.[stu.id];rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',sub?.name||'',a.name||'',a.type==='final'?'ปลายภาค':'ระหว่างเรียน',Number(a.fullScore||0),score?.submittedAt?'ส่งแล้ว':'ยังไม่ส่ง',excelDateTime(score?.submittedAt),score?.value==null?'':Number(score.value),score?.note||'']);});});
+    excelAddSheet(wb,'ประวัติการส่งงาน',rows,[9,15,28,14,25,32,14,12,12,22,10,28]);
+  }else{
+    const rows=[['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน','ส่งแล้ว','งานทั้งหมด','ร้อยละการส่งงาน']];
+    studs.forEach(stu=>{const sent=assignments.filter(a=>a.scores?.[stu.id]?.submittedAt).length;rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',sent,assignments.length,assignments.length?sent/assignments.length:0]);});
+    excelAddSheet(wb,'สรุปการส่งงาน',rows,[9,15,28,14,12,12,18]);
+    const ws=wb.Sheets[wb.SheetNames[wb.SheetNames.length-1]];
+    for(let r=2;r<=rows.length;r++){const cell=ws['G'+r];if(cell)cell.z='0%';}
+  }
+  excelAddSheet(wb,'ข้อมูลรายงาน',excelInfoRows('รายงานการส่งงาน',cls,subLabel,repWorkView==='history'?'ประวัติการส่ง':'สรุปรวม'),[25,38,20]);
+  return `รายงานการส่งงาน_${cls.name}_${subLabel}`;
+}
+function buildGradeExcel(wb,cls,subs,studs){
+  const selected=repSubj==='all'?subs:subs.filter(s=>s.id===repSubj);
+  const caps=gradeCaps();const subLabel=repSubj==='all'?'ทุกวิชา':selected[0]?.name||'-';
+  const rows=[['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน','รหัสวิชา','รายวิชา',`คะแนนเก็บ (${caps.during})`,`ปลายภาค (${caps.final})`,'คะแนนรวม','ผลการเรียน']];
+  selected.forEach(sub=>studs.forEach(stu=>{const r=subjectResult(stu,sub.id);rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',String(sub.code||''),sub.name||'',Number(r.duringScaled.toFixed(1)),Number(r.finalScaled.toFixed(1)),r.total,r.grade]);}));
+  excelAddSheet(wb,'ผลการเรียน',rows,[9,15,28,14,14,28,18,18,14,14]);
+  if(repSubj==='all'&&selected.length>1){
+    const avgRows=[['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน','คะแนนเฉลี่ย','ผลการเรียนเฉลี่ย']];
+    studs.forEach(stu=>{const values=selected.map(sub=>subjectResult(stu,sub.id).total);const avg=values.length?Math.round(values.reduce((a,b)=>a+b,0)/values.length):0;avgRows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',avg,letterGrade(avg)]);});
+    excelAddSheet(wb,'สรุปเฉลี่ย',avgRows,[9,15,28,14,15,18]);
+  }
+  excelAddSheet(wb,'ข้อมูลรายงาน',excelInfoRows('รายงานผลการเรียน',cls,subLabel,termLabel(selected[0]||{})),[25,38,20]);
+  return `รายงานผลการเรียน_${cls.name}_${subLabel}`;
+}
+function exportReportExcel(){
+  try{
+    if(typeof XLSX==='undefined')return banner('โหลดระบบสร้าง Excel ไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วรีเฟรช',true);
+    const cls=clsById(repCls);if(!cls)return banner('กรุณาเลือกห้องเรียนก่อน',true);
+    const subs=subjectsOf(repCls);const studs=studentsOf(repCls);
+    if(!studs.length)return banner('ห้องนี้ยังไม่มีนักเรียน',true);
+    const wb=XLSX.utils.book_new();
+    wb.Props={Title:'รายงานจาก '+(DB.systemName||''),Author:session?.name||'',Company:DB.school||'',CreatedDate:new Date()};
+    let fileBase='รายงาน';
+    if(repMode==='att')fileBase=buildAttendanceExcel(wb,cls,subs,studs);
+    else if(repMode==='work')fileBase=buildWorkExcel(wb,cls,subs,studs);
+    else fileBase=buildGradeExcel(wb,cls,subs,studs);
+    XLSX.writeFile(wb,excelSafeName(fileBase)+'.xlsx',{compression:true,cellDates:true});
+    banner('ส่งออก Excel เรียบร้อยแล้ว');
+  }catch(error){console.error('Excel export failed:',error);banner('ส่งออก Excel ไม่สำเร็จ: '+(error.message||error),true);}
+}
+
 function printReport() {
   const cls = clsById(repCls);
   if (!cls) return banner('กรุณาเลือกห้องเรียนก่อน', true);
