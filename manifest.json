@@ -1,11 +1,12 @@
 {
-  "name": "SSC Application",
-  "short_name": "SSC",
-  "description": "SSC Application",
+  "name": "ระบบบริหารจัดการชั้นเรียน V1",
+  "short_name": "ระบบชั้นเรียน",
+  "description": "ระบบเช็กชื่อและจัดการชั้นเรียน",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0A0D12",
   "theme_color": "#0A0D12",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "Logo SSC.png",
