@@ -11,27 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<!-- Favicon -->
-<link rel="icon" type="image/png" sizes="32x32" href="icon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="icon-16.png">
 
-<!-- Apple Touch Icon (iOS) -->
-<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
-
-<!-- Android Chrome -->
-<link rel="icon" sizes="192x192" href="icon-192.png">
-<link rel="icon" sizes="512x512" href="icon-512.png">
-
-<!-- Microsoft Tiles -->
-<meta name="msapplication-TileImage" content="icon-192.png">
-<meta name="msapplication-TileColor" content="#0A0D12">
-
-<!-- PWA Manifest -->
-<link rel="manifest" href="manifest.json">
-
-<!-- Theme color for mobile browsers -->
-<meta name="theme-color" content="#0A0D12">
-  
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   :root{
@@ -235,6 +215,19 @@ body{font-size:clamp(15px,1.4vw,17px);padding-bottom:110px}
 .rand-ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-start;justify-content:center;z-index:9999;padding:20px;overflow:auto}
 .rand-box{background:#fff;border-radius:20px;padding:20px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .rand-result{text-align:center;background:#f5f6fa;border-radius:16px;padding:20px;min-height:120px;display:flex;flex-direction:column;justify-content:center}
+.score-sheet-wrap{overflow:auto;max-height:68vh;border:1px solid var(--sep);border-radius:16px;background:#fff;overscroll-behavior:contain}
+.score-sheet{border-collapse:separate;border-spacing:0;min-width:max-content;width:100%;font-size:13px}
+.score-sheet th,.score-sheet td{border-right:1px solid var(--sep);border-bottom:1px solid var(--sep);padding:7px;background:#fff;text-align:center;vertical-align:middle}
+.score-sheet thead th{position:sticky;top:0;z-index:4;background:#eaf0ff;font-weight:700;white-space:normal;min-width:92px}
+.score-sheet .sg-no{position:sticky;left:0;z-index:3;min-width:54px;background:#f8f9ff}
+.score-sheet .sg-code{position:sticky;left:54px;z-index:3;min-width:92px;background:#f8f9ff}
+.score-sheet .sg-name{position:sticky;left:146px;z-index:3;min-width:220px;max-width:220px;text-align:left;background:#f8f9ff}
+.score-sheet thead .sg-no,.score-sheet thead .sg-code,.score-sheet thead .sg-name{z-index:6;background:#dfe8ff}
+.score-sheet input{width:74px;margin:0;padding:8px 6px;text-align:center;border-radius:9px;background:#fff}
+.score-sheet input.sg-dirty{border-color:var(--orange);background:#fff8e8;box-shadow:0 0 0 2px rgba(255,159,28,.12)}
+.score-sheet input.sg-error{border-color:var(--red);background:#fff0f0}
+.score-sheet .sg-total{font-weight:700;background:#f0fbf4;min-width:80px}
+.score-sheet .sg-empty{color:var(--label);font-size:11px}
 
 </style>
 </head>
@@ -288,6 +281,7 @@ body{font-size:clamp(15px,1.4vw,17px);padding-bottom:110px}
 <div id="page-scan" class="page"></div>
 <div id="page-rank" class="page"></div>
 <div id="page-report" class="page"></div>
+<div id="page-scoregrid" class="page"></div>
 <div id="page-stats" class="page"></div>
 <div id="page-print" class="page"></div>
 <div id="page-portal" class="page"></div>
@@ -886,17 +880,18 @@ const TAB_DEF={
   scan:['เช็กชื่อ','<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M7.8 12.4l2.7 2.7 5.6-6" stroke="#22c55e" stroke-width="2.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','var(--gGreen)'],
   rank:['อันดับ','<svg viewBox="0 0 24 24"><path d="M8 4h8v4a4 4 0 0 1-8 0z" fill="#fff"/><rect x="10.6" y="12" width="2.8" height="4" fill="#fff"/><rect x="7" y="18" width="10" height="2.6" rx="1.3" fill="#fff"/></svg>','var(--gGold)'],
   report:['รายงาน','<svg viewBox="0 0 24 24"><rect x="5" y="4.5" width="14" height="16.5" rx="3.5" fill="#fff"/><rect x="9" y="3" width="6" height="3.2" rx="1.5" fill="#9b5cff"/><path d="M8.5 11h7M8.5 14h7M8.5 17h4.5" stroke="#9b5cff" stroke-width="1.6" stroke-linecap="round"/></svg>','var(--gPurple)'],
+  scoregrid:['ลงคะแนน','<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3" fill="#fff"/><path d="M3 9h18M9 4v16M15 4v16" stroke="#0ea5e9" stroke-width="1.5"/><path d="M5.5 14l1.5 1.5 2.5-3" stroke="#0ea5e9" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','var(--gTeal)'],
   stats:['สถิติ','<svg viewBox="0 0 24 24"><rect x="3.5" y="12" width="4.2" height="8.5" rx="2.1" fill="#fff"/><rect x="9.9" y="6.5" width="4.2" height="14" rx="2.1" fill="#fff"/><rect x="16.3" y="9" width="4.2" height="11.5" rx="2.1" fill="#fff"/></svg>','var(--gPink)'],
   print:['พิมพ์บัตร','<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="3.4" fill="#fff"/><circle cx="8.2" cy="11.2" r="2.1" fill="#ff8a00"/><path d="M13 10h5M13 13h4" stroke="#ff8a00" stroke-width="1.6" stroke-linecap="round"/></svg>','var(--gOrange)'],
   tools:['เครื่องมือ','<svg viewBox="0 0 24 24"><path d="M5 19l8.5-8.5" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M15.5 3.5l1.3 2.7 2.7 1.3-2.7 1.3-1.3 2.7-1.3-2.7-2.7-1.3 2.7-1.3z" fill="#fff"/></svg>','var(--gTeal)'],
   settings:['ตั้งค่า','<svg viewBox="0 0 24 24"><path d="M12 2.2l2 3.2h3.4l-1.2 3.2 3 2.2-3 2.2 1.2 3.2H14l-2 3.2-2-3.2H6.6l1.2-3.2-3-2.2 3-2.2L6.6 5.4H10z" fill="#fff"/><circle cx="12" cy="12" r="3.1" fill="#475569"/></svg>','var(--gSlate)'],
 };
 const TABS_BY_ROLE={
-  admin:['users','class','scan','rank','report','stats','print','tools','settings'],
-  teacher:['class','scan','rank','report','stats','print','tools','settings'],
+  admin:['users','class','scan','scoregrid','rank','report','stats','print','tools','settings'],
+  teacher:['class','scan','scoregrid','rank','report','stats','print','tools','settings'],
   student:[]
 };
-const SUBTITLE={users:'จัดการบัญชีและสิทธิ์',class:'จัดการห้อง นักเรียน รายวิชา',scan:'เช็กชื่อ & รับงาน',rank:'คะแนน · เข้าเรียน · แต้ม',report:'มาเรียน / ส่งงาน',stats:'สถิติแยกรายวิชา',print:'บัตรนักเรียน + QR',tools:'สุ่มชื่อ · จับเวลา · เสียง',settings:'แบรนด์ · เกรด · บัญชี',portal:'ข้อมูลของฉัน'};
+const SUBTITLE={users:'จัดการบัญชีและสิทธิ์',class:'จัดการห้อง นักเรียน รายวิชา',scan:'เช็กชื่อ & รับงาน',scoregrid:'นักเรียน × ชิ้นงาน',rank:'คะแนน · เข้าเรียน · แต้ม',report:'มาเรียน / ส่งงาน',stats:'สถิติแยกรายวิชา',print:'บัตรนักเรียน + QR',tools:'สุ่มชื่อ · จับเวลา · เสียง',settings:'แบรนด์ · เกรด · บัญชี',portal:'ข้อมูลของฉัน'};
 
 let currentTab='class';
 function renderTabbar(){const bar=document.getElementById('tabbar');const tabs=TABS_BY_ROLE[session.role]||[];
@@ -915,14 +910,16 @@ function openStudentPortal(){document.getElementById('tabbar').style.display='no
   document.getElementById('page-portal').classList.add('active');
   document.getElementById('pageTitle').textContent='พอร์ทัลนักเรียน';
   renderBrand();renderPortal();}
-function go(tab){currentTab=tab;
+function go(tab){
+  if(scoreGridDirty&&currentTab==='scoregrid'&&tab!=='scoregrid'&&!confirm('มีคะแนนที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?'))return;
+  currentTab=tab;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+tab).classList.add('active');
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
   document.getElementById('pageTitle').textContent=TAB_DEF[tab]?TAB_DEF[tab][0]:'';
   if(tab!=='scan')stopScanner();render();}
 function render(){renderBrand();document.getElementById('pageSub').textContent=SUBTITLE[currentTab]||'';
-  ({users:renderUsers,class:renderClassPage,scan:renderScan,rank:renderRank,report:renderReport,stats:renderStats,print:renderPrint,portal:renderPortal,tools:renderTools,settings:renderSettings}[currentTab]||(()=>{}))();}
+  ({users:renderUsers,class:renderClassPage,scan:renderScan,scoregrid:renderScoreGrid,rank:renderRank,report:renderReport,stats:renderStats,print:renderPrint,portal:renderPortal,tools:renderTools,settings:renderSettings}[currentTab]||(()=>{}))();}
 function renderBrand(){const bn=document.getElementById('brandName');if(bn)bn.textContent=DB.systemName||'ระบบชั้นเรียน';
   const lg=document.getElementById('brandLogo');if(lg)lg.innerHTML=DB.logo?`<img src="${esc(DB.logo)}" onerror="this.parentNode.textContent='🎒'">`:'🎒';}
 function setTopActions(h){document.getElementById('topActions').innerHTML=h;}
@@ -1585,6 +1582,95 @@ async function setNote(aid,sid,v){
   await saveScoreRow(aid,sid);
 }
 
+/* ============================================================
+   SCORE GRID — บันทึกคะแนนหลายคน × หลายชิ้นงาน
+   ============================================================ */
+let scoreGridCls=null,scoreGridSubj=null,scoreGridDirty=false;
+const scoreGridDraft=new Map();
+function studentNumberSort(a,b){
+  const an=Number(a.number),bn=Number(b.number);
+  if(Number.isFinite(an)&&Number.isFinite(bn)&&an!==bn)return an-bn;
+  return String(a.number||'').localeCompare(String(b.number||''),'th',{numeric:true})||String(a.name||'').localeCompare(String(b.name||''),'th');
+}
+function scoreGridKey(aid,sid){return aid+'|'+sid;}
+function scoreGridSubjects(classId){
+  const allowed=new Set(mySubjects().map(s=>s.id));
+  return subjectsOf(classId).filter(s=>allowed.has(s.id));
+}
+function scoreGridAssignments(){
+  return DB.assignments.filter(a=>a.subjectId===scoreGridSubj).sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||'')||String(a.name||'').localeCompare(String(b.name||''),'th'));
+}
+function scoreGridStudents(){return studentsOf(scoreGridCls).slice().sort(studentNumberSort);}
+function scoreGridValue(a,stu){
+  const key=scoreGridKey(a.id,stu.id);
+  return scoreGridDraft.has(key)?scoreGridDraft.get(key):(a.scores?.[stu.id]?.value??'');
+}
+function scoreGridValid(a,value){
+  if(value==='')return true;
+  const n=Number(value);return Number.isFinite(n)&&n>=0&&n<=Number(a.fullScore||0);
+}
+function scoreGridSelectClass(id){
+  if(scoreGridDirty&&!confirm('มีคะแนนที่ยังไม่ได้บันทึก ต้องการเปลี่ยนห้องและทิ้งค่าที่แก้หรือไม่?'))return renderScoreGrid();
+  scoreGridDraft.clear();scoreGridDirty=false;scoreGridCls=id;scoreGridSubj=null;renderScoreGrid();
+}
+function scoreGridSelectSubject(id){
+  if(scoreGridDirty&&!confirm('มีคะแนนที่ยังไม่ได้บันทึก ต้องการเปลี่ยนวิชาและทิ้งค่าที่แก้หรือไม่?'))return renderScoreGrid();
+  scoreGridDraft.clear();scoreGridDirty=false;scoreGridSubj=id;renderScoreGrid();
+}
+function scoreGridChange(aid,sid,value,input){
+  const a=DB.assignments.find(x=>x.id===aid);if(!a)return;
+  const clean=String(value).trim();scoreGridDraft.set(scoreGridKey(aid,sid),clean);scoreGridDirty=true;
+  input?.classList.toggle('sg-error',!scoreGridValid(a,clean));input?.classList.add('sg-dirty');
+  scoreGridUpdateTotal(sid);
+  const saveBtn=document.getElementById('scoreGridSave');if(saveBtn)saveBtn.textContent=`💾 บันทึกคะแนน (${scoreGridDraft.size} ช่อง)`;
+}
+function scoreGridUpdateTotal(sid){
+  const asgs=scoreGridAssignments();let got=0,full=0;
+  asgs.forEach(a=>{const value=scoreGridDraft.has(scoreGridKey(a.id,sid))?scoreGridDraft.get(scoreGridKey(a.id,sid)):(a.scores?.[sid]?.value??'');if(value!==''&&value!=null)got+=Number(value)||0;full+=Number(a.fullScore)||0;});
+  const cell=document.querySelector(`[data-sg-total="${sid}"]`);if(cell)cell.textContent=`${got}/${full}`;
+}
+function scoreGridPaste(event,startRow,startCol){
+  const text=event.clipboardData?.getData('text');if(!text||(!text.includes('\t')&&!text.includes('\n')))return;
+  event.preventDefault();const matrix=text.replace(/\r/g,'').trimEnd().split('\n').map(row=>row.split('\t'));
+  const students=scoreGridStudents(),asgs=scoreGridAssignments();
+  matrix.forEach((row,ri)=>row.forEach((value,ci)=>{
+    const stu=students[startRow+ri],a=asgs[startCol+ci];if(!stu||!a)return;
+    const input=document.querySelector(`[data-sg="${a.id}|${stu.id}"]`);if(input){input.value=value.trim();scoreGridChange(a.id,stu.id,input.value,input);}
+  }));
+  banner(`วางข้อมูล ${matrix.length} แถวแล้ว · ตรวจสอบก่อนกดบันทึก`);
+}
+async function saveScoreGrid(){
+  if(!scoreGridDraft.size)return banner('ยังไม่มีคะแนนที่แก้ไข',true);
+  const rows=[];const invalid=[];
+  scoreGridDraft.forEach((value,key)=>{const [aid,sid]=key.split('|');const a=DB.assignments.find(x=>x.id===aid);if(!a)return;if(!scoreGridValid(a,value))invalid.push(`${a.name}: ${value}`);else rows.push({assignment_id:aid,student_id:sid,value:value===''?null:Number(value)});});
+  if(invalid.length)return banner('พบคะแนนไม่ถูกต้องหรือเกินคะแนนเต็ม '+invalid.length+' ช่อง',true);
+  if(!rows.length)return banner('ไม่มีข้อมูลสำหรับบันทึก',true);
+  if(!confirm(`ยืนยันบันทึกคะแนน ${rows.length} ช่อง?\nตรวจสอบชื่อ เลขที่ และคะแนนก่อนดำเนินการ`))return;
+  const btn=document.getElementById('scoreGridSave');if(btn){btn.disabled=true;btn.textContent='กำลังบันทึก...';}
+  const {error}=await sb.from('scores').upsert(rows,{onConflict:'assignment_id,student_id'});
+  if(error){if(btn){btn.disabled=false;btn.textContent='💾 บันทึกคะแนนที่แก้ไข';}return banner('บันทึกคะแนนไม่สำเร็จ: '+error.message,true);}
+  rows.forEach(row=>{const a=DB.assignments.find(x=>x.id===row.assignment_id);a.scores=a.scores||{};a.scores[row.student_id]=a.scores[row.student_id]||{};a.scores[row.student_id].value=row.value;});
+  const count=rows.length;scoreGridDraft.clear();scoreGridDirty=false;save();
+  logAction({type:'work',subject:subjById(scoreGridSubj)?.name||'',detail:`บันทึกคะแนนแบบตาราง ${count} ช่อง`});
+  soundOK();renderScoreGrid();banner(`บันทึกคะแนน ${count} ช่องเรียบร้อย`);
+}
+function renderScoreGrid(){
+  setTopActions('');const el=document.getElementById('page-scoregrid');const classes=myClassrooms();
+  if(!classes.length){el.innerHTML='<div class="empty"><div class="big">📊</div>ยังไม่มีชั้นเรียน</div>';return;}
+  if(!scoreGridCls||!classes.some(c=>c.id===scoreGridCls))scoreGridCls=activeClassId&&classes.some(c=>c.id===activeClassId)?activeClassId:classes[0].id;
+  const subjects=scoreGridSubjects(scoreGridCls);
+  if(!scoreGridSubj||!subjects.some(s=>s.id===scoreGridSubj))scoreGridSubj=subjects[0]?.id||null;
+  const asgs=scoreGridAssignments(),students=scoreGridStudents();
+  const controls=`<div class="selbar"><div class="row"><div style="flex:1;min-width:180px"><label class="fl">ชั้นเรียน</label><select style="margin:0" onchange="scoreGridSelectClass(this.value)">${classes.map(c=>`<option value="${c.id}" ${c.id===scoreGridCls?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div><div style="flex:1;min-width:220px"><label class="fl">รายวิชา</label><select style="margin:0" onchange="scoreGridSelectSubject(this.value)">${subjects.map(s=>`<option value="${s.id}" ${s.id===scoreGridSubj?'selected':''}>${esc(s.code||'')} ${esc(s.name)}</option>`).join('')||'<option value="">ยังไม่มีรายวิชา</option>'}</select></div></div><p class="meta" style="margin:10px 0 0">กรอกทีละช่อง หรือคัดลอกคะแนนหลายแถวจาก Excel แล้ววางที่ช่องแรก · ช่องสีส้มคือค่าที่ยังไม่บันทึก</p></div>`;
+  if(!scoreGridSubj){el.innerHTML=controls+'<div class="empty">ห้องนี้ยังไม่มีรายวิชาที่คุณรับผิดชอบ</div>';return;}
+  if(!asgs.length){el.innerHTML=controls+'<div class="empty"><div class="big">📝</div>รายวิชานี้ยังไม่มีชิ้นงาน<br>สร้างชิ้นงานในหน้าชั้นเรียนก่อน</div>';return;}
+  const head=asgs.map(a=>`<th title="${esc(a.name)}">${esc(a.name)}<div class="meta">เต็ม ${a.fullScore}</div></th>`).join('');
+  const body=students.map((stu,ri)=>{let got=0,full=0;const cells=asgs.map((a,ci)=>{const value=scoreGridValue(a,stu);got+=(value===''?0:Number(value)||0);full+=Number(a.fullScore)||0;return`<td><input data-sg="${a.id}|${stu.id}" type="number" min="0" max="${a.fullScore}" step="0.01" value="${esc(value)}" placeholder="-" oninput="scoreGridChange('${a.id}','${stu.id}',this.value,this)" onpaste="scoreGridPaste(event,${ri},${ci})"><div class="sg-empty">/${a.fullScore}</div></td>`;}).join('');return`<tr><td class="sg-no">${esc(stu.number||'')}</td><td class="sg-code">${esc(stu.code||'')}</td><td class="sg-name">${esc(stu.name||'')}</td>${cells}<td class="sg-total" data-sg-total="${stu.id}">${got}/${full}</td></tr>`;}).join('');
+  el.innerHTML=controls+`<div class="listcard"><div class="row" style="margin-bottom:10px"><div><h3>ตารางบันทึกคะแนน</h3><div class="meta">${students.length} คน · ${asgs.length} ชิ้นงาน</div></div><div class="spacer"></div><button id="scoreGridSave" class="btn green" onclick="saveScoreGrid()">💾 บันทึกคะแนน${scoreGridDraft.size?` (${scoreGridDraft.size} ช่อง)`:''}</button></div><div class="score-sheet-wrap"><table class="score-sheet"><thead><tr><th class="sg-no">เลขที่</th><th class="sg-code">รหัส</th><th class="sg-name">ชื่อ-นามสกุล</th>${head}<th>รวมดิบ</th></tr></thead><tbody>${body||'<tr><td colspan="4">ยังไม่มีนักเรียน</td></tr>'}</tbody></table></div></div>`;
+  scoreGridDraft.forEach((value,key)=>{const input=document.querySelector(`[data-sg="${key}"]`);if(input){input.classList.add('sg-dirty');const aid=key.split('|')[0],a=DB.assignments.find(x=>x.id===aid);input.classList.toggle('sg-error',!scoreGridValid(a,value));}});
+}
+window.addEventListener('beforeunload',event=>{if(scoreGridDirty){event.preventDefault();event.returnValue='';}});
+
 
   
 
@@ -2131,7 +2217,9 @@ function excelAddSheet(wb,name,rows,widths){
   }
   XLSX.utils.book_append_sheet(wb,ws,excelSafeName(name,'ข้อมูล').slice(0,31));
 }
+function excelSortedStudents(studs){return studs.slice().sort(studentNumberSort);}
 function excelInfoRows(title,cls,subjectLabel,periodLabel){
+  const printerRole=session?.role==='admin'?'ผู้ดูแลระบบ (Admin)':'ครูผู้สอน';
   return [
     ['ชื่อระบบ',DB.systemName||''],
     ['สถานศึกษา',DB.school||''],
@@ -2140,10 +2228,11 @@ function excelInfoRows(title,cls,subjectLabel,periodLabel){
     ['รายวิชา',subjectLabel],
     ['ช่วงข้อมูล',periodLabel||'-'],
     ['ผู้ส่งออก',session?.name||''],
+    ['ตำแหน่งผู้พิมพ์ข้อมูล',printerRole],
     ['วันเวลาที่ส่งออก',new Date()],
     [],
     ['การลงชื่อยืนยัน','ชื่อ-นามสกุล','วันที่'],
-    ['ผู้พิมพ์ข้อมูล',session?.name||'',''],
+    [`ผู้พิมพ์ข้อมูล (${printerRole})`,session?.name||'',''],
     ['ครูประจำชั้น','',''],
     ['หัวหน้ากลุ่มงานวิชาการ','',''],
     ['ผู้อำนวยการ/รองผู้อำนวยการ','','']
@@ -2154,27 +2243,19 @@ function buildAttendanceExcel(wb,cls,subs,studs){
   const subIds=selected.map(s=>s.id);
   const subLabel=repSubj==='all'?'ทุกวิชา':selected[0]?.name||'-';
   const rng=reportRange();
-  const rows=[];
+  const sorted=excelSortedStudents(studs);const rows=[];
   if(repPeriod==='day'){
-    rows.push(['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน','รายวิชา','วันที่','สถานะ']);
-    studs.forEach(stu=>{
-      if(repSubj==='all'){
-        selected.forEach(sub=>{
-          const status=stu.attendance?.[attKey(sub.id,repDate)]||'';
-          rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',sub.name||'',repDate,status?ATTLABEL[status]||status:'ยังไม่เช็ก']);
-        });
-      }else{
-        const sub=selected[0];const status=stu.attendance?.[attKey(sub?.id,repDate)]||'';
-        rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',sub?.name||'',repDate,status?ATTLABEL[status]||status:'ยังไม่เช็ก']);
-      }
-    });
-    excelAddSheet(wb,'รายละเอียดการมาเรียน',rows,[10,16,28,14,26,14,16]);
+    rows.push(['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน','วันที่',...selected.map(s=>s.name),'มาเรียน','มาสาย','ขาดเรียน','หนีเรียน','ลา/ลากิจ','ยังไม่เช็ก']);
+    sorted.forEach(stu=>{const count={present:0,late:0,absent:0,skip:0,leave:0,none:0};const statusCells=selected.map(sub=>{const status=stu.attendance?.[attKey(sub.id,repDate)]||'';count[status||'none']++;return status?ATTLABEL[status]||status:'ยังไม่เช็ก';});rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',repDate,...statusCells,count.present,count.late,count.absent,count.skip,count.leave,count.none]);});
+    excelAddSheet(wb,'การมาเรียนรายวัน',rows,[9,15,28,14,14,...selected.map(()=>24),10,10,10,10,10,12]);
   }else{
-    rows.push(['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน','มาเรียน','มาสาย','ขาดเรียน','หนีเรียน','ลา/ลากิจ','รวมครั้ง','ร้อยละเวลาเรียน']);
-    studs.forEach(stu=>{const a=attAgg(stu,subIds,rng.start,rng.end);rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',a.present,a.late,a.absent,a.skip,a.leave,a.tot,a.attendPct/100]);});
-    excelAddSheet(wb,'สรุปการมาเรียน',rows,[10,16,28,14,10,10,10,10,10,10,18]);
+    const subjectHeaders=selected.flatMap(sub=>[`${sub.name} - มา`,`${sub.name} - สาย`,`${sub.name} - ขาด`,`${sub.name} - หนี`,`${sub.name} - ลา`,`${sub.name} - รวม`,`${sub.name} - ร้อยละ`]);
+    rows.push(['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน',...subjectHeaders,'มาเรียนรวม','มาสายรวม','ขาดเรียนรวม','หนีเรียนรวม','ลา/ลากิจรวม','รวมครั้ง','ร้อยละเวลาเรียน']);
+    sorted.forEach(stu=>{const perSubject=selected.flatMap(sub=>{const a=attAgg(stu,[sub.id],rng.start,rng.end);return[a.present,a.late,a.absent,a.skip,a.leave,a.tot,a.attendPct/100];});const total=attAgg(stu,subIds,rng.start,rng.end);rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',...perSubject,total.present,total.late,total.absent,total.skip,total.leave,total.tot,total.attendPct/100]);});
+    excelAddSheet(wb,'สรุปการมาเรียน',rows,[9,15,28,14,...selected.flatMap(()=>[12,12,12,12,12,12,14]),12,12,12,12,12,12,18]);
     const ws=wb.Sheets[wb.SheetNames[wb.SheetNames.length-1]];
-    for(let r=2;r<=rows.length;r++){const cell=ws['K'+r];if(cell)cell.z='0%';}
+    const pctCols=[];selected.forEach((_,i)=>pctCols.push(4+i*7+6));pctCols.push(rows[0].length-1);
+    for(let r=2;r<=rows.length;r++)pctCols.forEach(c=>{const cell=ws[XLSX.utils.encode_cell({r:r-1,c})];if(cell)cell.z='0%';});
   }
   excelAddSheet(wb,'ข้อมูลรายงาน',excelInfoRows('รายงานการมาเรียน',cls,subLabel,rng.label),[25,38,20]);
   return `รายงานการมาเรียน_${cls.name}_${rng.start}_ถึง_${rng.end}`;
@@ -2182,18 +2263,17 @@ function buildAttendanceExcel(wb,cls,subs,studs){
 function buildWorkExcel(wb,cls,subs,studs){
   const selected=repSubj==='all'?subs:subs.filter(s=>s.id===repSubj);
   const subIds=selected.map(s=>s.id);
-  const assignments=DB.assignments.filter(a=>subIds.includes(a.subjectId));
+  const assignments=DB.assignments.filter(a=>subIds.includes(a.subjectId)).sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||'')||String(a.name||'').localeCompare(String(b.name||''),'th'));
   const subLabel=repSubj==='all'?'ทุกวิชา':selected[0]?.name||'-';
+  const rows=[['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน',...assignments.map(a=>a.name),'งานทั้งหมด','ส่งแล้ว','ยังไม่ส่ง','ร้อยละการส่งงาน']];
+  excelSortedStudents(studs).forEach(stu=>{const statuses=assignments.map(a=>a.scores?.[stu.id]?.submittedAt?'ส่งแล้ว':'ยังไม่ส่ง');const sent=statuses.filter(x=>x==='ส่งแล้ว').length;rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',...statuses,assignments.length,sent,assignments.length-sent,assignments.length?sent/assignments.length:0]);});
+  excelAddSheet(wb,'สถานะการส่งงาน',rows,[9,15,28,14,...assignments.map(()=>24),12,12,12,18]);
+  const ws=wb.Sheets[wb.SheetNames[wb.SheetNames.length-1]];
+  for(let r=2;r<=rows.length;r++){const cell=ws[XLSX.utils.encode_cell({r:r-1,c:rows[0].length-1})];if(cell)cell.z='0%';}
   if(repWorkView==='history'){
-    const rows=[['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน','รายวิชา','ชื่องาน','ประเภทงาน','คะแนนเต็ม','สถานะส่ง','วันเวลาที่ส่ง','คะแนน','หมายเหตุ']];
-    assignments.forEach(a=>{const sub=subjById(a.subjectId);studs.forEach(stu=>{const score=a.scores?.[stu.id];rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',sub?.name||'',a.name||'',a.type==='final'?'ปลายภาค':'ระหว่างเรียน',Number(a.fullScore||0),score?.submittedAt?'ส่งแล้ว':'ยังไม่ส่ง',excelDateTime(score?.submittedAt),score?.value==null?'':Number(score.value),score?.note||'']);});});
-    excelAddSheet(wb,'ประวัติการส่งงาน',rows,[9,15,28,14,25,32,14,12,12,22,10,28]);
-  }else{
-    const rows=[['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน','ส่งแล้ว','งานทั้งหมด','ร้อยละการส่งงาน']];
-    studs.forEach(stu=>{const sent=assignments.filter(a=>a.scores?.[stu.id]?.submittedAt).length;rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',sent,assignments.length,assignments.length?sent/assignments.length:0]);});
-    excelAddSheet(wb,'สรุปการส่งงาน',rows,[9,15,28,14,12,12,18]);
-    const ws=wb.Sheets[wb.SheetNames[wb.SheetNames.length-1]];
-    for(let r=2;r<=rows.length;r++){const cell=ws['G'+r];if(cell)cell.z='0%';}
+    const timeRows=[['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน',...assignments.map(a=>a.name)]];
+    excelSortedStudents(studs).forEach(stu=>timeRows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',...assignments.map(a=>excelDateTime(a.scores?.[stu.id]?.submittedAt))]));
+    excelAddSheet(wb,'วันเวลาที่ส่ง',timeRows,[9,15,28,14,...assignments.map(()=>22)]);
   }
   excelAddSheet(wb,'ข้อมูลรายงาน',excelInfoRows('รายงานการส่งงาน',cls,subLabel,repWorkView==='history'?'ประวัติการส่ง':'สรุปรวม'),[25,38,20]);
   return `รายงานการส่งงาน_${cls.name}_${subLabel}`;
@@ -2201,12 +2281,13 @@ function buildWorkExcel(wb,cls,subs,studs){
 function buildGradeExcel(wb,cls,subs,studs){
   const selected=repSubj==='all'?subs:subs.filter(s=>s.id===repSubj);
   const caps=gradeCaps();const subLabel=repSubj==='all'?'ทุกวิชา':selected[0]?.name||'-';
-  const rows=[['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน','รหัสวิชา','รายวิชา',`คะแนนเก็บ (${caps.during})`,`ปลายภาค (${caps.final})`,'คะแนนรวม','ผลการเรียน']];
-  selected.forEach(sub=>studs.forEach(stu=>{const r=subjectResult(stu,sub.id);rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',String(sub.code||''),sub.name||'',Number(r.duringScaled.toFixed(1)),Number(r.finalScaled.toFixed(1)),r.total,r.grade]);}));
-  excelAddSheet(wb,'ผลการเรียน',rows,[9,15,28,14,14,28,18,18,14,14]);
+  const subjectHeaders=selected.flatMap(sub=>[`${sub.code||''} ${sub.name} - คะแนนเก็บ (${caps.during})`,`${sub.code||''} ${sub.name} - ปลายภาค (${caps.final})`,`${sub.code||''} ${sub.name} - รวม`,`${sub.code||''} ${sub.name} - ผลการเรียน`]);
+  const rows=[['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน',...subjectHeaders]];
+  excelSortedStudents(studs).forEach(stu=>{const values=selected.flatMap(sub=>{const r=subjectResult(stu,sub.id);return[Number(r.duringScaled.toFixed(1)),Number(r.finalScaled.toFixed(1)),r.total,r.grade];});rows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',...values]);});
+  excelAddSheet(wb,'ผลการเรียน',rows,[9,15,28,14,...selected.flatMap(()=>[28,28,22,22])]);
   if(repSubj==='all'&&selected.length>1){
     const avgRows=[['เลขที่','รหัสนักเรียน','ชื่อ-นามสกุล','ชั้นเรียน','คะแนนเฉลี่ย','ผลการเรียนเฉลี่ย']];
-    studs.forEach(stu=>{const values=selected.map(sub=>subjectResult(stu,sub.id).total);const avg=values.length?Math.round(values.reduce((a,b)=>a+b,0)/values.length):0;avgRows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',avg,letterGrade(avg)]);});
+    excelSortedStudents(studs).forEach(stu=>{const values=selected.map(sub=>subjectResult(stu,sub.id).total);const avg=values.length?Math.round(values.reduce((a,b)=>a+b,0)/values.length):0;avgRows.push([String(stu.number||''),String(stu.code||''),stu.name||'',cls.name||'',avg,letterGrade(avg)]);});
     excelAddSheet(wb,'สรุปเฉลี่ย',avgRows,[9,15,28,14,15,18]);
   }
   excelAddSheet(wb,'ข้อมูลรายงาน',excelInfoRows('รายงานผลการเรียน',cls,subLabel,termLabel(selected[0]||{})),[25,38,20]);
@@ -2245,6 +2326,9 @@ function printReport() {
   // กำหนดชื่อผู้ลงนามได้ที่นี่
   // เว้นว่างเพื่อให้กรอกชื่อด้วยลายมือ
   const printerName = session?.name || '';
+  const printerPosition = session?.role === 'admin'
+    ? 'ผู้พิมพ์ข้อมูล (Admin)'
+    : 'ผู้พิมพ์ข้อมูล (ครูผู้สอน)';
   const classroomTeacherName = '';
   const academicHeadName = '';
   const directorName = '';
@@ -2284,7 +2368,7 @@ function printReport() {
         column-gap:10mm;
         row-gap:5mm;
       ">
-        ${signatureBox(printerName, 'ผู้พิมพ์ข้อมูล')}
+        ${signatureBox(printerName, printerPosition)}
         ${signatureBox(classroomTeacherName, 'ครูประจำชั้น')}
         ${signatureBox(academicHeadName, 'หัวหน้ากลุ่มงานวิชาการ')}
         ${signatureBox(directorName, directorPosition)}
