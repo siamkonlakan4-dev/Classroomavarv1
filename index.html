@@ -229,6 +229,101 @@ body{font-size:clamp(15px,1.4vw,17px);padding-bottom:110px}
 .score-sheet .sg-total{font-weight:700;background:#f0fbf4;min-width:80px}
 .score-sheet .sg-empty{color:var(--label);font-size:11px}
 
+/* ===== Responsive workspace: mobile / tablet / desktop ===== */
+.scan-main-grid{display:grid;gap:14px}
+.scan-code-row,.scan-camera-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.scan-code-row input{margin:0;flex:1 1 210px}
+.scan-code-row .btn{flex:0 0 auto}
+.device-hint{display:none}
+
+/* Mobile: touch first, bottom navigation, compact sticky columns */
+@media (max-width:639px){
+  body{padding-bottom:104px;background-attachment:scroll}
+  .topbar{padding:9px 10px;gap:6px}
+  .logo{width:40px;height:40px;border-radius:12px}
+  .brand{gap:8px;min-width:0;flex:1}
+  .brandname{font-size:15px;max-width:58vw}
+  .topbar .sub{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:58vw}
+  .topbar .sub #pageSub{display:none}
+  .topbar .sub #pageTitle::after{content:""}
+  .logoutbtn{width:40px;height:40px;padding:0;justify-content:center;border-radius:12px;font-size:0}
+  .logoutbtn svg{width:19px;height:19px}
+  .topright{gap:4px}
+  #topActions .btn{padding:8px 9px;font-size:12px}
+  .page{padding:12px 10px 22px}
+  .listcard{padding:14px;border-radius:17px;margin-bottom:11px}
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .scard{padding:12px 7px 10px;border-radius:16px}
+  .scard .avatar{width:58px;height:58px;margin:8px auto 6px}
+  .scard .name{font-size:13px}
+  .scard .code{font-size:10.5px}
+  .statgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .stat{padding:14px 12px}
+  .stat .v{font-size:25px}
+  .row.mobile-stack{align-items:stretch;flex-direction:column}
+  .scan-code-row{align-items:stretch}
+  .scan-code-row input{flex-basis:100%;font-size:18px;min-height:50px}
+  .scan-code-row .btn{flex:1;min-height:48px}
+  .scan-camera-actions{display:grid;grid-template-columns:1fr 1fr}
+  .scan-camera-actions .btn{width:100%;padding:12px 8px}
+  .savebar{bottom:96px;padding:8px;border-radius:15px}
+  .savebar .btn{padding:12px 8px}
+  .score-sheet-wrap{max-height:64vh;border-radius:12px}
+  .score-sheet{font-size:12px}
+  .score-sheet th,.score-sheet td{padding:5px}
+  .score-sheet .sg-code{display:none}
+  .score-sheet .sg-name{left:54px;min-width:154px;max-width:154px}
+  .score-sheet input{width:64px;padding:8px 4px}
+  .score-sheet-toolbar{align-items:stretch!important}
+  .score-sheet-toolbar>div:first-child{width:100%}
+  .score-sheet-toolbar .btn{width:100%}
+  .subtabs{overflow-x:auto;justify-content:flex-start}
+  .subtab{min-width:94px}
+  .modal{padding:16px 14px calc(24px + env(safe-area-inset-bottom))}
+  .banner{top:8px;width:calc(100% - 20px);max-width:none;padding:12px 14px}
+}
+
+/* Tablet: wider cards and comfortable bottom navigation */
+@media (min-width:640px) and (max-width:1023px){
+  :root{--maxw:min(980px,100%)}
+  .page{padding-left:22px;padding-right:22px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr))}
+  .scan-main-grid{grid-template-columns:minmax(300px,.9fr) minmax(360px,1.1fr);align-items:start}
+  .scan-main-grid .savebar{bottom:112px}
+  .cardgrid{grid-template-columns:repeat(2,minmax(280px,1fr))}
+}
+
+/* Desktop: left navigation and full-width working area */
+@media (min-width:1024px){
+  :root{--maxw:1500px}
+  body{padding:0 0 30px 108px}
+  .topbar{max-width:none;margin:0;padding:14px 24px;min-height:76px}
+  .logo{width:48px;height:48px}
+  .brandname{max-width:520px;font-size:20px}
+  .topbar .sub{font-size:14px}
+  .page{max-width:1500px;padding:24px 28px 42px}
+  .tabbar{top:0;bottom:0;left:0;right:auto;width:108px;max-width:none;margin:0;padding:14px 8px;flex-direction:column;justify-content:flex-start;gap:4px;border-top:0;border-right:1px solid rgba(150,140,200,.14);overflow-x:hidden;overflow-y:auto}
+  .tab{width:92px;min-width:92px;padding:7px 3px;border-radius:16px;font-size:11px}
+  .tab .ico{width:44px;height:44px;margin-bottom:3px}
+  .tab.active{background:#f1f3ff}
+  .tab.active::after{content:"";position:absolute;left:-8px;top:13px;bottom:13px;width:4px;border-radius:0 5px 5px 0;background:var(--blue)}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:16px}
+  .cardgrid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+  .statgrid{grid-template-columns:repeat(4,minmax(150px,1fr))}
+  .scan-main-grid{grid-template-columns:minmax(350px,.8fr) minmax(560px,1.2fr);align-items:start}
+  .scan-control-card{position:sticky;top:100px}
+  .scan-main-grid .grid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}
+  .savebar{bottom:20px}
+  .modal-bg{align-items:center;padding:24px}
+  .modal{max-width:620px;border-radius:24px;padding:22px 24px;max-height:88vh}
+  .modal .grab{display:none}
+  .score-sheet-wrap{max-height:calc(100vh - 270px)}
+  .score-sheet .sg-name{min-width:240px;max-width:240px}
+  .login-card{max-width:430px;padding:38px 34px}
+  body.student-mode{padding-left:0}
+  body.student-mode .page{max-width:1100px}
+}
+
 </style>
 </head>
 <body>
@@ -899,12 +994,13 @@ function renderTabbar(){const bar=document.getElementById('tabbar');const tabs=T
   bar.style.display='';bar.innerHTML=tabs.map(t=>{const[lb,svg,grad]=TAB_DEF[t];return`<button class="tab ${t===currentTab?'active':''}" data-tab="${t}"><span class="ico" style="background:${grad}">${svg}</span><span class="tlb">${lb}</span></button>`;}).join('');
   bar.querySelectorAll('.tab').forEach(b=>b.onclick=()=>go(b.dataset.tab));}
 function enterApp(){document.getElementById('loginScreen').classList.add('hidden');
+  document.body.classList.toggle('student-mode',isStudent());
   document.querySelector('.topbar').style.display='';ensureActiveClass();
   if(isStudent()){const stu=DB.students.find(s=>s.id===session.studentId);
     if(stu&&stu.mustChange){showForceChange();return;}
     openStudentPortal();return;}
   currentTab=(TABS_BY_ROLE[session.role][0])||'class';renderTabbar();go(currentTab);}
-function openStudentPortal(){document.getElementById('tabbar').style.display='none';
+function openStudentPortal(){document.body.classList.add('student-mode');document.getElementById('tabbar').style.display='none';
   document.querySelector('.topbar').style.display='';
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-portal').classList.add('active');
@@ -1666,7 +1762,7 @@ function renderScoreGrid(){
   if(!asgs.length){el.innerHTML=controls+'<div class="empty"><div class="big">📝</div>รายวิชานี้ยังไม่มีชิ้นงาน<br>สร้างชิ้นงานในหน้าชั้นเรียนก่อน</div>';return;}
   const head=asgs.map(a=>`<th title="${esc(a.name)}">${esc(a.name)}<div class="meta">เต็ม ${a.fullScore}</div></th>`).join('');
   const body=students.map((stu,ri)=>{let got=0,full=0;const cells=asgs.map((a,ci)=>{const value=scoreGridValue(a,stu);got+=(value===''?0:Number(value)||0);full+=Number(a.fullScore)||0;return`<td><input data-sg="${a.id}|${stu.id}" type="number" min="0" max="${a.fullScore}" step="0.01" value="${esc(value)}" placeholder="-" oninput="scoreGridChange('${a.id}','${stu.id}',this.value,this)" onpaste="scoreGridPaste(event,${ri},${ci})"><div class="sg-empty">/${a.fullScore}</div></td>`;}).join('');return`<tr><td class="sg-no">${esc(stu.number||'')}</td><td class="sg-code">${esc(stu.code||'')}</td><td class="sg-name">${esc(stu.name||'')}</td>${cells}<td class="sg-total" data-sg-total="${stu.id}">${got}/${full}</td></tr>`;}).join('');
-  el.innerHTML=controls+`<div class="listcard"><div class="row" style="margin-bottom:10px"><div><h3>ตารางบันทึกคะแนน</h3><div class="meta">${students.length} คน · ${asgs.length} ชิ้นงาน</div></div><div class="spacer"></div><button id="scoreGridSave" class="btn green" onclick="saveScoreGrid()">💾 บันทึกคะแนน${scoreGridDraft.size?` (${scoreGridDraft.size} ช่อง)`:''}</button></div><div class="score-sheet-wrap"><table class="score-sheet"><thead><tr><th class="sg-no">เลขที่</th><th class="sg-code">รหัส</th><th class="sg-name">ชื่อ-นามสกุล</th>${head}<th>รวมดิบ</th></tr></thead><tbody>${body||'<tr><td colspan="4">ยังไม่มีนักเรียน</td></tr>'}</tbody></table></div></div>`;
+  el.innerHTML=controls+`<div class="listcard"><div class="row score-sheet-toolbar" style="margin-bottom:10px"><div><h3>ตารางบันทึกคะแนน</h3><div class="meta">${students.length} คน · ${asgs.length} ชิ้นงาน</div></div><div class="spacer"></div><button id="scoreGridSave" class="btn green" onclick="saveScoreGrid()">💾 บันทึกคะแนน${scoreGridDraft.size?` (${scoreGridDraft.size} ช่อง)`:''}</button></div><div class="score-sheet-wrap"><table class="score-sheet"><thead><tr><th class="sg-no">เลขที่</th><th class="sg-code">รหัส</th><th class="sg-name">ชื่อ-นามสกุล</th>${head}<th>รวมดิบ</th></tr></thead><tbody>${body||'<tr><td colspan="4">ยังไม่มีนักเรียน</td></tr>'}</tbody></table></div></div>`;
   scoreGridDraft.forEach((value,key)=>{const input=document.querySelector(`[data-sg="${key}"]`);if(input){input.classList.add('sg-dirty');const aid=key.split('|')[0],a=DB.assignments.find(x=>x.id===aid);input.classList.toggle('sg-error',!scoreGridValid(a,value));}});
 }
 window.addEventListener('beforeunload',event=>{if(scoreGridDirty){event.preventDefault();event.returnValue='';}});
@@ -1849,17 +1945,17 @@ function renderScan(){setTopActions('');const el=document.getElementById('page-s
   return grid+bar;
   })();
 
-  el.innerHTML=`<div class="listcard">
+  el.innerHTML=`<div class="scan-main-grid"><div class="listcard scan-control-card">
       <div class="row" style="margin-bottom:10px"><button class="btn sm ${scanMode==='att'?'':'gray'}" onclick="window._pending.clear();scanMode='att';render()">เช็กชื่อ</button><button class="btn sm ${scanMode==='work'?'':'gray'}" onclick="window._pending.clear();scanMode='work';render()">รับงาน</button></div>
       <label class="fl">รายวิชา</label><select style="margin-bottom:6px" onchange="window._pending.clear();scanSubjId=this.value;scanClsId=null;scanAssignId=null;render()">${subjOptions}</select>
       ${clsSelector}<div class="meta" style="margin-bottom:10px">👧 ชั้น ${esc(cls.name)} · ${studs.length} คน · ${scanMode==='att'?`เช็กแล้ว ${doneAtt}/${studs.length}`:`รับงานแล้ว ${doneWork}/${studs.length}`}</div>
       ${scanMode==='att'?`<label class="fl">วันที่</label><input type="date" value="${scanDate}" onchange="window._pending.clear();scanDate=this.value;render()">${warn}`:`<label class="fl">เลือกชิ้นงาน</label><select onchange="scanAssignId=this.value;render()">${asgs.map(a=>`<option value="${a.id}" ${a.id===scanAssignId?'selected':''}>${esc(a.name)}</option>`).join('')||'<option>— ยังไม่มีชิ้นงาน —</option>'}</select>`}
       <div id="scanResult" role="status" aria-live="polite" aria-atomic="true"></div>
       <label class="fl" style="margin-top:6px">ป้อน "รหัสนักเรียน" แล้วกด Enter</label>
-      <div class="row"><input id="codeIn" placeholder="เช่น 12345" style="margin:0;flex:1" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();markByCode()}"><button class="btn green" onclick="markByCode()">บันทึก</button></div>
+      <div class="scan-code-row"><input id="codeIn" placeholder="เช่น 12345" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();markByCode()}"><button class="btn green" onclick="markByCode()">บันทึก</button></div>
       <button class="btn sm gray" style="margin-top:10px" onclick="if(!scanBusy){stopScanner();render()}">อัปเดตรายชื่อด้านล่าง</button>
       <div id="reader" style="border-radius:14px;overflow:hidden;margin-top:12px"></div>
-      <div class="row" style="margin-top:10px"><button class="btn" onclick="startScanner()">เปิดกล้องยิง QR</button><button class="btn gray" onclick="stopScanner();render()">หยุด</button></div></div>
+      <div class="scan-camera-actions" style="margin-top:10px"><button class="btn" onclick="startScanner()">เปิดกล้องยิง QR</button><button class="btn gray" onclick="stopScanner();render()">หยุด</button></div></div>
         ${scanMode==='att'
       ?`<div class="listcard"><h3>👆 เช็กชื่อด้วยมือ</h3>
           <p class="meta" style="margin:4px 0 10px">1) เลือกสถานะ → 2) แตะเลือกนักเรียน (เลือกได้หลายคน) → 3) กดบันทึก · คนที่เช็กแล้วจะล็อก 🔒 กันเช็กซ้ำ</p>
@@ -1867,7 +1963,7 @@ function renderScan(){setTopActions('');const el=document.getElementById('page-s
           ${manualBlock}</div>`
       :`<div class="listcard"><h3>👆 รับงานหลายคน</h3>
           <p class="meta" style="margin:4px 0 10px">1) เลือกชิ้นงานด้านบน → 2) แตะเลือกนักเรียน (เลือกได้หลายคน) → 3) กดบันทึก · คนที่ส่งแล้วจะล็อก 🔒 แตะซ้ำเพื่อยกเลิก</p>
-          ${workBlock}</div>`}
+          ${workBlock}</div>`}</div>
     <div class="listcard"><h3>🕒 ประวัติล่าสุด</h3>${recent.length?recent.map(l=>`<div class="logrow"><span class="ld" style="background:${l.status?ATTCOLOR[l.status]:'var(--blue)'}"></span><div style="flex:1"><b>${esc(l.name)}</b><div class="meta">${esc(l.subject||'')} · ${esc(l.detail||'')}</div></div><span class="meta">${thDateTime(l.at)}</span></div>`).join(''):'<p class="meta">ยังไม่มีรายการ</p>'}</div>`;paintScanResult();requestAnimationFrame(focusScanCode);}
 
 
