@@ -1127,7 +1127,25 @@ let stuSelMode=false;const stuSel=new Set();
 function openWorkspace(id){if(!canSeeClass(id))return banner('ไม่มีสิทธิ์เข้าห้องนี้',true);wsOpen=id;activeClassId=id;wsTab='students';render();}
 function closeWorkspace(){wsOpen=null;render();}
 function setWsTab(t){wsTab=t;render();}
-function renderClassPage(){const el=document.getElementById('page-class');const mine=myClassrooms();
+// Sort classroom cards by education stage, grade, then room number.
+function classroomSortKey(c){
+  const normalize=v=>String(v||'').replace(/[๐-๙]/g,d=>String('๐๑๒๓๔๕๖๗๘๙'.indexOf(d))).trim();
+  function parse(value){
+    const t=normalize(value);
+    const m=t.match(/^(?:ชั้น\s*)?(อนุบาล|ประถมศึกษา|มัธยมศึกษา|อ\.?|ป\.?|ม\.?)\s*(?:ปีที่\s*)?(\d+)(?:\s*[/\-]\s*(\d+))?/);
+    if(!m)return null;
+    const stage=/^(อนุบาล|อ)/.test(m[1])?0:/^(ประถม|ป)/.test(m[1])?1:2;
+    return [stage,Number(m[2]),m[3]?Number(m[3]):null];
+  }
+  const name=parse(c.name),level=parse(c.level),key=name||level;
+  return key?[key[0],key[1],key[2]??(level&&level[0]===key[0]&&level[1]===key[1]?level[2]:null)??0]:[99,0,0];
+}
+function compareClassrooms(a,b){
+  const x=classroomSortKey(a),y=classroomSortKey(b);
+  for(let i=0;i<x.length;i++)if(x[i]!==y[i])return x[i]-y[i];
+  return String(a.name||'').localeCompare(String(b.name||''),'th',{numeric:true})||String(a.id||'').localeCompare(String(b.id||''));
+}
+function renderClassPage(){const el=document.getElementById('page-class');const mine=myClassrooms().sort(compareClassrooms);
   if(!wsOpen||!clsById(wsOpen)||!canSeeClass(wsOpen)){
       setTopActions(isAdmin()?`<button class="btn sm" onclick="classroomModal()">+ ชั้นเรียน</button>`:'');
     if(!mine.length){el.innerHTML=`<div class="empty"><div class="big">🏫</div>${isAdmin()?'ยังไม่มีชั้นเรียนในระบบ':'คุณยังไม่มีชั้นเรียน'}<br>สร้างชั้นเรียนเพื่อเริ่มเพิ่มนักเรียนและรายวิชา<br><button class="btn" onclick="classroomModal()">+ สร้างชั้นเรียน</button></div>`;return;}
